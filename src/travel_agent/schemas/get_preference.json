@@ -1,0 +1,6 @@
+{
+  "type": "object",
+  "properties": {"key": {"type": "string", "enum": ["response_language", "preferred_output_format"]}},
+  "required": ["key"],
+  "additionalProperties": false
+}

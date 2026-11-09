@@ -1,0 +1,6 @@
+{
+  "type": "object",
+  "properties": {"trip_id": {"type": "string", "pattern": "^TRIP-\\d{4}-\\d{3}$"}},
+  "required": ["trip_id"],
+  "additionalProperties": false
+}

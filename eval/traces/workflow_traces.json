@@ -1,0 +1,374 @@
+[
+  {
+    "case_id": "T01_pretrip_happy",
+    "run_id": "3f936fba-c101-488e-bd75-af3deafcd657",
+    "trace": [
+      {
+        "run_id": "3f936fba-c101-488e-bd75-af3deafcd657",
+        "phase": "tool_execution",
+        "action": "run_started",
+        "tool": null,
+        "safe_args": {},
+        "observation_status": "not_applicable",
+        "transition": "started",
+        "budget": {
+          "step": 0,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T01_pretrip_happy"
+      },
+      {
+        "run_id": "3f936fba-c101-488e-bd75-af3deafcd657",
+        "phase": "pretrip_trip_lookup",
+        "action": "tool_call",
+        "tool": "get_trip_request",
+        "safe_args": {
+          "trip_id": "TRIP-2026-006"
+        },
+        "observation_status": "ok",
+        "transition": "tool_succeeded",
+        "budget": {
+          "step": 1,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T01_pretrip_happy"
+      },
+      {
+        "run_id": "3f936fba-c101-488e-bd75-af3deafcd657",
+        "phase": "pretrip_requirement_discovery",
+        "action": "tool_call",
+        "tool": "validate_trip_requirements",
+        "safe_args": {
+          "trip_id": "TRIP-2026-006",
+          "evidence_ref_count": 0
+        },
+        "observation_status": "ok",
+        "transition": "tool_succeeded",
+        "budget": {
+          "step": 2,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T01_pretrip_happy"
+      },
+      {
+        "run_id": "3f936fba-c101-488e-bd75-af3deafcd657",
+        "phase": "pretrip_policy_retrieval",
+        "action": "tool_call",
+        "tool": "search_travel_policy",
+        "safe_args": {
+          "category": "approval",
+          "max_results": 5,
+          "query_length": 64
+        },
+        "observation_status": "ok",
+        "transition": "tool_succeeded",
+        "budget": {
+          "step": 3,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T01_pretrip_happy"
+      },
+      {
+        "run_id": "3f936fba-c101-488e-bd75-af3deafcd657",
+        "phase": "pretrip_policy_retrieval",
+        "action": "tool_call",
+        "tool": "search_travel_policy",
+        "safe_args": {
+          "category": "travel",
+          "max_results": 5,
+          "query_length": 62
+        },
+        "observation_status": "ok",
+        "transition": "tool_succeeded",
+        "budget": {
+          "step": 4,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T01_pretrip_happy"
+      },
+      {
+        "run_id": "3f936fba-c101-488e-bd75-af3deafcd657",
+        "phase": "pretrip_policy_retrieval",
+        "action": "tool_call",
+        "tool": "search_travel_policy",
+        "safe_args": {
+          "category": "insurance",
+          "max_results": 5,
+          "query_length": 65
+        },
+        "observation_status": "ok",
+        "transition": "tool_succeeded",
+        "budget": {
+          "step": 5,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T01_pretrip_happy"
+      },
+      {
+        "run_id": "3f936fba-c101-488e-bd75-af3deafcd657",
+        "phase": "pretrip_policy_retrieval",
+        "action": "tool_call",
+        "tool": "search_travel_policy",
+        "safe_args": {
+          "category": "visa",
+          "max_results": 5,
+          "query_length": 60
+        },
+        "observation_status": "ok",
+        "transition": "tool_succeeded",
+        "budget": {
+          "step": 6,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T01_pretrip_happy"
+      },
+      {
+        "run_id": "3f936fba-c101-488e-bd75-af3deafcd657",
+        "phase": "pretrip_validation",
+        "action": "tool_call",
+        "tool": "validate_trip_requirements",
+        "safe_args": {
+          "trip_id": "TRIP-2026-006",
+          "evidence_ref_count": 8
+        },
+        "observation_status": "ok",
+        "transition": "tool_succeeded",
+        "budget": {
+          "step": 7,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T01_pretrip_happy"
+      },
+      {
+        "run_id": "3f936fba-c101-488e-bd75-af3deafcd657",
+        "phase": "pretrip_draft",
+        "action": "tool_call",
+        "tool": "create_travel_checklist_draft",
+        "safe_args": {},
+        "observation_status": "ok",
+        "transition": "tool_succeeded",
+        "budget": {
+          "step": 8,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T01_pretrip_happy"
+      },
+      {
+        "run_id": "3f936fba-c101-488e-bd75-af3deafcd657",
+        "phase": "pretrip_draft",
+        "action": "run_finished",
+        "tool": null,
+        "safe_args": {},
+        "observation_status": "not_applicable",
+        "transition": "terminal",
+        "budget": {
+          "step": 8,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T01_pretrip_happy"
+      }
+    ]
+  },
+  {
+    "case_id": "T02_intrip_delay",
+    "run_id": "1eccf31b-bc91-42fe-b7ea-1b4a4f5f5077",
+    "trace": [
+      {
+        "run_id": "1eccf31b-bc91-42fe-b7ea-1b4a4f5f5077",
+        "phase": "tool_execution",
+        "action": "run_started",
+        "tool": null,
+        "safe_args": {},
+        "observation_status": "not_applicable",
+        "transition": "started",
+        "budget": {
+          "step": 0,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T02_intrip_delay"
+      },
+      {
+        "run_id": "1eccf31b-bc91-42fe-b7ea-1b4a4f5f5077",
+        "phase": "intrip_itinerary_lookup",
+        "action": "tool_call",
+        "tool": "get_itinerary",
+        "safe_args": {
+          "trip_id": "TRIP-2026-002"
+        },
+        "observation_status": "ok",
+        "transition": "tool_succeeded",
+        "budget": {
+          "step": 1,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T02_intrip_delay"
+      },
+      {
+        "run_id": "1eccf31b-bc91-42fe-b7ea-1b4a4f5f5077",
+        "phase": "intrip_policy_retrieval",
+        "action": "tool_call",
+        "tool": "search_travel_policy",
+        "safe_args": {
+          "category": "travel",
+          "max_results": 5,
+          "query_length": 106
+        },
+        "observation_status": "ok",
+        "transition": "tool_succeeded",
+        "budget": {
+          "step": 2,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T02_intrip_delay"
+      },
+      {
+        "run_id": "1eccf31b-bc91-42fe-b7ea-1b4a4f5f5077",
+        "phase": "intrip_draft",
+        "action": "tool_call",
+        "tool": "create_escalation_or_support_draft",
+        "safe_args": {},
+        "observation_status": "ok",
+        "transition": "tool_succeeded",
+        "budget": {
+          "step": 3,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T02_intrip_delay"
+      },
+      {
+        "run_id": "1eccf31b-bc91-42fe-b7ea-1b4a4f5f5077",
+        "phase": "intrip_draft",
+        "action": "run_finished",
+        "tool": null,
+        "safe_args": {},
+        "observation_status": "not_applicable",
+        "transition": "terminal",
+        "budget": {
+          "step": 3,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T02_intrip_delay"
+      }
+    ]
+  },
+  {
+    "case_id": "T03_expense_happy",
+    "run_id": "7be5bb8f-359e-412d-8276-824ac0fcc7d3",
+    "trace": [
+      {
+        "run_id": "7be5bb8f-359e-412d-8276-824ac0fcc7d3",
+        "phase": "tool_execution",
+        "action": "run_started",
+        "tool": null,
+        "safe_args": {},
+        "observation_status": "not_applicable",
+        "transition": "started",
+        "budget": {
+          "step": 0,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T03_expense_happy"
+      },
+      {
+        "run_id": "7be5bb8f-359e-412d-8276-824ac0fcc7d3",
+        "phase": "posttrip_report_lookup",
+        "action": "tool_call",
+        "tool": "get_expense_report",
+        "safe_args": {
+          "report_id": "EXP-2026-001"
+        },
+        "observation_status": "ok",
+        "transition": "tool_succeeded",
+        "budget": {
+          "step": 1,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T03_expense_happy"
+      },
+      {
+        "run_id": "7be5bb8f-359e-412d-8276-824ac0fcc7d3",
+        "phase": "posttrip_calculation",
+        "action": "tool_call",
+        "tool": "calculate_expense_summary",
+        "safe_args": {
+          "report_id": "EXP-2026-001"
+        },
+        "observation_status": "ok",
+        "transition": "tool_succeeded",
+        "budget": {
+          "step": 2,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T03_expense_happy"
+      },
+      {
+        "run_id": "7be5bb8f-359e-412d-8276-824ac0fcc7d3",
+        "phase": "posttrip_policy_retrieval",
+        "action": "tool_call",
+        "tool": "search_travel_policy",
+        "safe_args": {
+          "category": "expense",
+          "max_results": 5,
+          "query_length": 40
+        },
+        "observation_status": "ok",
+        "transition": "tool_succeeded",
+        "budget": {
+          "step": 3,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T03_expense_happy",
+        "safety_event": "untrusted_policy_chunk_excluded"
+      },
+      {
+        "run_id": "7be5bb8f-359e-412d-8276-824ac0fcc7d3",
+        "phase": "posttrip_draft",
+        "action": "tool_call",
+        "tool": "create_expense_review_draft",
+        "safe_args": {},
+        "observation_status": "ok",
+        "transition": "tool_succeeded",
+        "budget": {
+          "step": 4,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T03_expense_happy"
+      },
+      {
+        "run_id": "7be5bb8f-359e-412d-8276-824ac0fcc7d3",
+        "phase": "posttrip_draft",
+        "action": "run_finished",
+        "tool": null,
+        "safe_args": {},
+        "observation_status": "not_applicable",
+        "transition": "terminal",
+        "budget": {
+          "step": 4,
+          "max": 8
+        },
+        "outcome": "completed",
+        "case_id": "T03_expense_happy"
+      }
+    ]
+  }
+]

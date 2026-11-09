@@ -37,7 +37,14 @@ Rút ngắn độ polish, không bỏ acceptance floor: cả ba workflow chạy 
 - M1 (cuối ngày 3): gọi tool qua dispatcher, bị từ chối đúng với tool lạ/field lạ/ID sai.
 - M2 (cuối ngày 6): 3 workflow chạy end-to-end với planner rule-based.
 - M3 (cuối ngày 8): citation truy vết được, isolation pass.
-- M4 (cuối ngày 10): 15/15 test, báo cáo before/after.
+- M4 (cuối ngày 10): acceptance tests, reports before/after and regression comparison.
+
+## 4.1 Trạng thái repo (2026-11-09)
+- Mốc 1–5: mock systems, schemas/dispatcher, ba workflow, draft idempotency, offline RAG, scoped memory, Approver scope và Admin/RAG ACL đã triển khai.
+- Mốc 6: automated tests và 25 evaluation cases; baseline/after đạt 25/25. Metrics, case results, sample traces (kèm case_id) và regression report được lưu dưới `eval/`.
+- Có application CLI và deterministic planner cho request được hỗ trợ; không có LLM backend thật (test vẫn chạy offline).
+- Baseline được đo lần đầu sau khi hoàn thiện các phần mở rộng; không có số liệu trước thay đổi để đối chiếu historical before/after.
+- Admin read-only, append-only local audit events và role-filtered RAG được kiểm tra trong tests; các mở rộng không cấp quyền approve/reject cho Agent.
 
 ## 5. Rủi ro và cách giảm
 | Rủi ro | Giảm thiểu |

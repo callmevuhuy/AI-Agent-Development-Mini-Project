@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "properties": {
+    "report_id": {"type": "string", "pattern": "^EXP-\\d{4}-\\d{3}$"},
+    "review_preview": {"type": "object", "maxProperties": 20, "additionalProperties": true}
+  },
+  "required": ["report_id", "review_preview"],
+  "additionalProperties": false
+}

@@ -1,0 +1,8 @@
+{
+  "type": "object",
+  "properties": {
+    "trip_id": {"type": "string", "pattern": "^TRIP-[0-9]{4}-[0-9]{3}$"},
+    "report_id": {"type": "string", "pattern": "^EXP-[0-9]{4}-[0-9]{3}$"}
+  },
+  "additionalProperties": false
+}

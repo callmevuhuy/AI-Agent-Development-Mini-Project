@@ -1,0 +1,6 @@
+[
+  {"traveler_id": "EMP-001", "display_name": "Alex Nguyen", "department": "Sales", "preferences": {"response_language": "en", "seat": "aisle", "meal": "vegetarian"}},
+  {"traveler_id": "EMP-002", "display_name": "Jamie Tran", "department": "Engineering", "preferences": {"response_language": "en", "seat": "window", "meal": "standard"}},
+  {"traveler_id": "EMP-003", "display_name": "Taylor Pham", "department": "Sales", "preferences": {"response_language": "vi", "seat": "aisle", "meal": "standard"}},
+  {"traveler_id": "EMP-004", "display_name": "Morgan Le", "department": "Engineering", "preferences": {"response_language": "vi", "seat": "window", "meal": "vegetarian"}}
+]

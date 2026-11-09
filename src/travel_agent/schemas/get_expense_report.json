@@ -1,0 +1,6 @@
+{
+  "type": "object",
+  "properties": {"report_id": {"type": "string", "pattern": "^EXP-\\d{4}-\\d{3}$"}},
+  "required": ["report_id"],
+  "additionalProperties": false
+}

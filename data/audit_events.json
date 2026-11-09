@@ -1,0 +1,28 @@
+[
+  {
+    "event_id": "EVT-SEED-001",
+    "event_type": "approval_decision",
+    "actor_id": "U-APR-001",
+    "role": "Approver",
+    "action": "trip_approval",
+    "trip_id": "TRIP-2026-002",
+    "outcome": "approved",
+    "reason_code": "policy_complete",
+    "reason": "Required travel policy evidence was present and the checklist was complete.",
+    "timestamp": "2026-11-01T09:00:00+07:00",
+    "run_id": "seed-approval-002"
+  },
+  {
+    "event_id": "EVT-SEED-002",
+    "event_type": "approval_decision",
+    "actor_id": "U-APR-001",
+    "role": "Approver",
+    "action": "trip_approval",
+    "trip_id": "TRIP-2026-004",
+    "outcome": "denied",
+    "reason_code": "trip_cancelled_or_ineligible",
+    "reason": "The request did not meet the mock travel eligibility requirements.",
+    "timestamp": "2026-11-02T10:30:00+07:00",
+    "run_id": "seed-approval-004"
+  }
+]

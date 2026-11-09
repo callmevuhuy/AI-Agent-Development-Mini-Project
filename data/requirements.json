@@ -1,0 +1,10 @@
+{
+  "required_trip_fields": ["trip_id", "traveler_id", "origin", "destination", "start_date", "end_date", "purpose"],
+  "destination_policy_categories": {
+    "Singapore": ["approval", "travel", "insurance"],
+    "Sydney": ["approval", "travel", "insurance", "visa"]
+  },
+  "needs_human_travel_statuses": ["cancelled"],
+  "needs_human_trip_approval_statuses": ["rejected"],
+  "awaiting_approval_trip_statuses": ["pending"]
+}

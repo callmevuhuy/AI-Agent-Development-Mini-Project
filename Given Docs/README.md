@@ -1,23 +1,14 @@
-# Global Business Travel Operations Agent (training prototype)
+# Project quick start
 
-Agent học tập làm việc với mock systems qua function calling. Không có booking/payment/email thật.
+Run commands from the repository root. See the root `README.md` for setup, CLI examples, roles, and limitations.
 
-## Setup
-```
+```powershell
 python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
+.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+python -m travel_agent.app message --user U-EMP-002 --text "Prepare checklist for TRIP-2026-006"
+python -m pytest -q
+python eval/run_eval.py --label after
 ```
-## Run
-```
-python -m travel_agent.cli --user U-EMP-001 --message "Tôi chuẩn bị công tác Singapore với mã TRIP-2026-001. Cần chuẩn bị gì?"
-pytest -q
-python eval/run_eval.py
-```
-LLM thật là tùy chọn (biến môi trường); mặc định dùng planner rule-based.
 
-## Tài liệu
-AGENTS.md · docs/ARCHITECTURE.md (sơ đồ kiến trúc + 3 workflow) · docs/PLAN.md · docs/WORKFLOWS.md · docs/TOOL_CARDS.md · docs/DATA_SPEC.md · docs/MEMORY_AND_SAFETY.md · docs/TEST_MATRIX.md
-
-## Giới hạn
-Xem docs/MEMORY_AND_SAFETY.md mục 4.
+The offline planner is deterministic; no LLM or API key is configured. All systems and records are mock data.

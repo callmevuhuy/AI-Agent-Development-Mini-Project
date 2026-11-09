@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "properties": {
+    "key": {"type": "string", "enum": ["response_language", "preferred_output_format"]},
+    "value": {"type": "string", "enum": ["en", "vi", "concise", "detailed"]}
+  },
+  "required": ["key", "value"],
+  "allOf": [
+    {
+      "if": {"properties": {"key": {"const": "response_language"}}, "required": ["key"]},
+      "then": {"properties": {"value": {"enum": ["en", "vi"]}}}
+    },
+    {
+      "if": {"properties": {"key": {"const": "preferred_output_format"}}, "required": ["key"]},
+      "then": {"properties": {"value": {"enum": ["concise", "detailed"]}}}
+    }
+  ],
+  "additionalProperties": false
+}

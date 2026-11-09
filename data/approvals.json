@@ -1,0 +1,18 @@
+[
+  {
+    "trip_id": "TRIP-2026-001",
+    "trip_approval_status": "pending"
+  },
+  {
+    "trip_id": "TRIP-2026-002",
+    "trip_approval_status": "approved"
+  },
+  {
+    "trip_id": "TRIP-2026-004",
+    "trip_approval_status": "rejected"
+  },
+  {
+    "trip_id": "TRIP-2026-006",
+    "trip_approval_status": "approved"
+  }
+]

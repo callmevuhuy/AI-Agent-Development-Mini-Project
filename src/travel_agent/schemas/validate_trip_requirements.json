@@ -1,0 +1,33 @@
+{
+  "type": "object",
+  "properties": {
+    "trip_facts": {
+      "type": "object",
+      "properties": {
+        "trip_id": {"type": "string", "pattern": "^TRIP-\\d{4}-\\d{3}$"},
+        "traveler_id": {"type": "string", "pattern": "^EMP-\\d{3}$"},
+        "origin": {"type": "string"},
+        "destination": {"type": "string"},
+        "start_date": {"type": "string"},
+        "end_date": {"type": "string"},
+        "purpose": {"type": "string"},
+        "travel_status": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "chunk_id": {"type": "string", "minLength": 1},
+          "category": {"type": "string", "enum": ["travel", "expense", "visa", "insurance", "approval"]}
+        },
+        "required": ["chunk_id", "category"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["trip_facts", "evidence_refs"],
+  "additionalProperties": false
+}

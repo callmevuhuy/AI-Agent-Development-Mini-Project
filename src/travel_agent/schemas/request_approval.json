@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "trip_id": {"type": "string", "pattern": "^TRIP-[0-9]{4}-[0-9]{3}$"},
+    "action_type": {"type": "string", "enum": ["checklist_review", "escalation", "publish_request"]},
+    "action_summary": {"type": "string", "minLength": 5, "maxLength": 240}
+  },
+  "required": ["trip_id", "action_type", "action_summary"],
+  "additionalProperties": false
+}

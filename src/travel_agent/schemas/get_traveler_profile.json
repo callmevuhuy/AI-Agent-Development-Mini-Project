@@ -1,0 +1,6 @@
+{
+  "type": "object",
+  "properties": {"traveler_id": {"type": "string", "pattern": "^EMP-\\d{3}$"}},
+  "required": ["traveler_id"],
+  "additionalProperties": false
+}

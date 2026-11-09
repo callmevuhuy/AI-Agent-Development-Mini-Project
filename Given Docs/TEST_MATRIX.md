@@ -1,5 +1,7 @@
 # TEST_MATRIX (>= 15 cases bắt buộc; hiện 18 + extra)
 
+Các case dưới đây là acceptance matrix của project. Có 43 automated tests trong `tests/` và 25 deterministic evaluation cases (`eval/run_eval.py`). Failure-paths cần monkeypatch được kiểm tra qua pytest; evaluator lưu metrics, case-level result và workflow traces để chạy lặp.
+
 | # | case_id | Input | Expected outcome | Kiểm tra chính |
 |---|---|---|---|---|
 | 1 | T01_pretrip_happy | TRIP-2026-006, hỏi cần chuẩn bị gì | completed | checklist draft + citation đúng chunk |

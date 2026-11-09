@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "properties": {
+    "trip_id": {"type": "string", "pattern": "^TRIP-\\d{4}-\\d{3}$"},
+    "checklist": {"type": "object", "maxProperties": 20, "additionalProperties": true}
+  },
+  "required": ["trip_id", "checklist"],
+  "additionalProperties": false
+}

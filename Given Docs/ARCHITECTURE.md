@@ -5,7 +5,7 @@ Model chỉ đề xuất tool call. Dispatcher (code) kiểm tra và thực thi.
 
 ```mermaid
 flowchart TD
-    U["User (Employee / Reviewer / Approver)<br/>message + IDs"] --> APP["Application layer<br/>gắn user_context; Approver có approval_scope pending"]
+    U["User (Employee / Reviewer / Approver / Admin)<br/>message + IDs"] --> APP["Application layer<br/>gắn user_context; Approver có approval_scope pending"]
     APP --> ORCH["Orchestrator<br/>state machine + budget + workflow phase"]
     ORCH <--> LLM["Planner<br/>RuleBased (mặc định) | LLM tùy chọn<br/>chỉ đề xuất tool_name + args"]
     ORCH --> DISP["Dispatcher<br/>registry → allowlist → JSON Schema →<br/>domain validation → role/scope → budget"]
@@ -16,10 +16,11 @@ flowchart TD
     TOOLS --> M3["Mock Itinerary"]
     TOOLS --> M4["Mock Approval (fixture)"]
     TOOLS --> M5["Mock Expense"]
-    TOOLS --> RAG["Policy KB + RAG<br/>retriever → claim-evidence check → citation"]
+    TOOLS --> RAG["Policy KB + RAG<br/>role ACL → retriever → grounding → citation"]
     TOOLS --> DW["Draft Workspace (sandbox)<br/>idempotent draft_id"]
     ORCH --> MEM["Memory<br/>session state | preference (user yêu cầu)"]
     ORCH --> TR["Safe trace + eval record"]
+    APP --> ADMIN["Admin read-only tools<br/>trip overview + audit history"]
     ORCH --> OUT{"Evidence đủ<br/>và trong scope?"}
     OUT -->|đủ| DONE["completed + draft<br/>not_sent / not_published"]
     OUT -->|thiếu input| NI["needs_input"]
@@ -75,3 +76,8 @@ flowchart TD
 - Agent code không import trực tiếp `mock_systems/`; chỉ `tools/` được gọi vào đó.
 - `user_context` và `approval_scope` (nếu là lượt review Approver) đến từ application, không từ model. Approver chỉ đọc packet và facts liên quan tới đúng request pending trong scope. Source of truth của trip/itinerary/approval/expense luôn là mock systems.
 - Retrieved text là untrusted; không thay đổi allowlist, role hay outcome.
+
+## 6. Authorization extensions
+- `request_approval` is an Employee-only, owner-scoped tool that creates one pending request per `(trip_id, action_type)`. Only the external mock approval helper changes a decision; it appends an audit event with actor, reason, timestamp and run ID.
+- Admin has read-only `admin_list_trips` and `admin_get_audit_history`. No approval, draft, memory, policy RAG, or business-write tool is allowed.
+- Policy chunks carry `classification` and `allowed_roles`. The policy KB filters by role before BM25 ranking, version conflict calculation, and citation generation. Approver access additionally requires a pending action scope and category permission.

@@ -1,0 +1,4 @@
+[
+  {"trip_id": "TRIP-2026-001", "action_type": "checklist_review", "status": "pending"},
+  {"trip_id": "TRIP-2026-002", "action_type": "escalation", "status": "pending"}
+]

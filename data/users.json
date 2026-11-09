@@ -1,0 +1,37 @@
+[
+  {
+    "user_id": "U-EMP-001",
+    "role": "Employee",
+    "traveler_id": "EMP-001"
+  },
+  {
+    "user_id": "U-EMP-002",
+    "role": "Employee",
+    "traveler_id": "EMP-002"
+  },
+  {
+    "user_id": "U-EMP-003",
+    "role": "Employee",
+    "traveler_id": "EMP-003"
+  },
+  {
+    "user_id": "U-EMP-004",
+    "role": "Employee",
+    "traveler_id": "EMP-004"
+  },
+  {
+    "user_id": "U-REV-001",
+    "role": "Reviewer",
+    "traveler_id": null
+  },
+  {
+    "user_id": "U-APR-001",
+    "role": "Approver",
+    "traveler_id": null
+  },
+  {
+    "user_id": "U-ADM-001",
+    "role": "Admin",
+    "traveler_id": null
+  }
+]

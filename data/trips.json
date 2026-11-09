@@ -1,0 +1,8 @@
+[
+  {"trip_id": "TRIP-2026-001", "traveler_id": "EMP-001", "origin": "Hanoi, Viet Nam", "origin_airport": "HAN", "destination": "Singapore", "start_date": "2026-12-01", "end_date": "2026-12-05", "purpose": "Regional sales planning", "travel_status": "submitted"},
+  {"trip_id": "TRIP-2026-002", "traveler_id": "EMP-002", "origin": "Hanoi, Viet Nam", "origin_airport": "HAN", "destination": "Tokyo", "start_date": "2026-12-08", "end_date": "2026-12-12", "purpose": "Engineering partner workshop", "travel_status": "confirmed"},
+  {"trip_id": "TRIP-2026-003", "traveler_id": "EMP-003", "origin": "Hanoi, Viet Nam", "origin_airport": "HAN", "destination": "Berlin", "start_date": "2026-12-15", "end_date": "2026-12-20", "travel_status": "draft"},
+  {"trip_id": "TRIP-2026-004", "traveler_id": "EMP-001", "origin": "Hanoi, Viet Nam", "origin_airport": "HAN", "destination": "London", "start_date": "2026-12-21", "end_date": "2026-12-26", "purpose": "Customer account review", "travel_status": "submitted"},
+  {"trip_id": "TRIP-2026-005", "traveler_id": "EMP-004", "origin": "Hanoi, Viet Nam", "origin_airport": "HAN", "destination": "Bangkok", "start_date": "2026-12-27", "end_date": "2026-12-30", "purpose": "Product operations meeting", "travel_status": "cancelled"},
+  {"trip_id": "TRIP-2026-006", "traveler_id": "EMP-002", "origin": "Hanoi, Viet Nam", "origin_airport": "HAN", "destination": "Sydney", "start_date": "2026-12-31", "end_date": "2027-01-07", "purpose": "Customer implementation workshop", "travel_status": "confirmed"}
+]

@@ -11,5 +11,7 @@ htmlcov/
 *.egg-info/
 dist/
 build/
+data/drafts/*.json
+data/memory/**/*.json
 .DS_Store
 Thumbs.db

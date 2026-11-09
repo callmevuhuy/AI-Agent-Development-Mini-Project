@@ -1,0 +1,16 @@
+[
+  {"report_id": "EXP-2026-001", "trip_id": "TRIP-2026-002", "traveler_id": "EMP-002", "currency": "USD", "line_items": [
+    {"item_id": "ITEM-001-01", "category": "ground_transport", "amount": 42.50, "date": "2026-12-09", "receipt_attached": true},
+    {"item_id": "ITEM-001-02", "category": "ground_transport", "amount": 28.00, "date": "2026-12-09", "receipt_attached": true},
+    {"item_id": "ITEM-001-03", "category": "lodging", "amount": 220.00, "date": "2026-12-09", "receipt_attached": true}
+  ]},
+  {"report_id": "EXP-2026-002", "trip_id": "TRIP-2026-006", "traveler_id": "EMP-002", "currency": "USD", "line_items": [
+    {"item_id": "ITEM-002-01", "category": "lodging", "amount": 210.00, "date": "2027-01-02", "receipt_attached": false},
+    {"item_id": "ITEM-002-02", "category": "ground_transport", "amount": 38.00, "receipt_attached": true}
+  ]},
+  {"report_id": "EXP-2026-003", "trip_id": "TRIP-2026-001", "traveler_id": "EMP-001", "currency": "USD", "line_items": [
+    {"item_id": "ITEM-003-01", "category": "meals", "amount": 52.00, "date": "2026-12-02", "receipt_attached": true},
+    {"item_id": "ITEM-003-02", "category": "meals", "amount": 38.00, "date": "2026-12-02", "receipt_attached": true},
+    {"item_id": "ITEM-003-03", "category": "lodging", "amount": 245.00, "date": "2026-12-02", "receipt_attached": true}
+  ]}
+]

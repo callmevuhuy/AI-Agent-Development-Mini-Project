@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "properties": {
+    "trip_id": {"type": "string", "pattern": "^TRIP-\\d{4}-\\d{3}$"},
+    "support_draft": {"type": "object", "maxProperties": 20, "additionalProperties": true}
+  },
+  "required": ["trip_id", "support_draft"],
+  "additionalProperties": false
+}
