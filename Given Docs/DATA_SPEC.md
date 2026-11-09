@@ -32,7 +32,7 @@ EMP-001/EMP-003 (Sales), EMP-002/EMP-004 (Engineering). Fields: traveler_id, dis
 Flight/hotel/event giả. TRIP-2026-002 có `disruption: {type: flight_delay, delay_minutes: 240}`; thêm một case `flight_cancelled` (TRIP-2026-005 hoặc 006).
 
 ## approvals.json
-Fixture theo trip_id: `pending / approved / rejected` (001 pending, 002 approved, 004 rejected, 006 approved). Đây là nguồn quyết định duy nhất. `request_approval` chỉ tạo record `pending` mới (idempotent theo `(trip_id, action_type)`), không bao giờ đổi sang approved/rejected.
+Fixture `trip_approval_status` theo trip_id: `pending / approved / rejected` (001 pending, 002 approved, 004 rejected, 006 approved). Đây là nguồn quyết định duy nhất về approval của chuyến đi và tool agent không sửa fixture này. Tách riêng các `approval_request` do `request_approval` tạo: mỗi request có `(trip_id, action_type)` và status `pending`; tool không bao giờ đổi request sang approved/rejected. Approver review scope tham chiếu đúng một request pending bằng cặp `(trip_id, action_type)`.
 
 ## expenses.json (>= 3)
 | report_id | trip | tình huống |

@@ -5,7 +5,7 @@ Model chỉ đề xuất tool call. Dispatcher (code) kiểm tra và thực thi.
 
 ```mermaid
 flowchart TD
-    U["User (Employee / Reviewer / Approver)<br/>message + IDs"] --> APP["Application layer<br/>gắn user_context (user_id, role, session_id)"]
+    U["User (Employee / Reviewer / Approver)<br/>message + IDs"] --> APP["Application layer<br/>gắn user_context; Approver có approval_scope pending"]
     APP --> ORCH["Orchestrator<br/>state machine + budget + workflow phase"]
     ORCH <--> LLM["Planner<br/>RuleBased (mặc định) | LLM tùy chọn<br/>chỉ đề xuất tool_name + args"]
     ORCH --> DISP["Dispatcher<br/>registry → allowlist → JSON Schema →<br/>domain validation → role/scope → budget"]
@@ -73,5 +73,5 @@ flowchart TD
 
 ## 5. Data boundary
 - Agent code không import trực tiếp `mock_systems/`; chỉ `tools/` được gọi vào đó.
-- `user_context` đến từ application. Source of truth của trip/itinerary/approval/expense luôn là mock systems.
+- `user_context` và `approval_scope` (nếu là lượt review Approver) đến từ application, không từ model. Approver chỉ đọc packet và facts liên quan tới đúng request pending trong scope. Source of truth của trip/itinerary/approval/expense luôn là mock systems.
 - Retrieved text là untrusted; không thay đổi allowlist, role hay outcome.

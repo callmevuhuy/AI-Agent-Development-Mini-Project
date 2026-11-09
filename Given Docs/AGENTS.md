@@ -13,7 +13,7 @@ This file is the guiding document for any dev/agent implementing this project. I
 7. Never claim "approved", "refunded", "booked", "sent", "published". `delivery_status` is `not_sent` / `not_published`.
 8. No real PII, credentials, network calls to third parties, booking/payment/email.
 9. `request_approval` only creates `pending` records (schema in docs/TOOL_CARDS.md). Approved/rejected come from the approval fixture; the agent has no tool to approve.
-10. Authorization uses `user_context` (user_id, role, session_id) attached by the application, never by the model. See role matrix in docs/MEMORY_AND_SAFETY.md.
+10. Authorization uses application-owned `user_context` (user_id, role, session_id, and optional approval_scope), never model-supplied identity or scope. Approver access is limited to the one pending request in that scope. See docs/MEMORY_AND_SAFETY.md.
 11. Honest terminal outcomes only: `completed | needs_input | needs_human | awaiting_approval | partial | failed_validation | failed_delivery | failed_budget`.
 12. Every run produces a safe trace. No secrets in trace.
 
@@ -51,7 +51,7 @@ travel_ops_agent/
 ## 3. Implementation Rules
 - Python 3.11+. Dependencies minimal: `jsonschema`, `pytest`, `pydantic` (optional), `rank_bm25` or scikit-learn TF-IDF. Retrieval must run offline.
 - `llm.py` exposes one interface with two backends: `RuleBasedPlanner` (deterministic, used by tests/eval) and an optional real-LLM backend via env var. Tests must pass without any API key.
-- Dispatcher pipeline (fixed order): registry lookup -> per-workflow allowlist -> JSON Schema (`additionalProperties: false`) -> domain validation (ID regex `TRIP-YYYY-NNN`, `EXP-YYYY-NNN`, query length) -> mock authorization (role matrix + user/session scope) -> budget check -> execute -> structured result.
+- Dispatcher pipeline (fixed order): registry lookup -> per-workflow allowlist -> JSON Schema (`additionalProperties: false`) -> domain validation (ID regex `TRIP-YYYY-NNN`, `EXP-YYYY-NNN`, query length) -> mock authorization (role matrix + user/session/approval scope) -> budget check -> execute -> structured result.
 - Tool result contract: `{ok, data, meta{source, read_only}}` or `{ok:false, error{code, message, retryable}}`. Error messages are safe (no stack traces).
 - Retry only when `retryable: true`, max 2 retries per tool call. `max_steps` default 8 per run. Retrieval `top_k <= 5`. Query rewrite max 1 per branch, traced.
 - Draft tools use a stable `draft_id` derived from `(workflow, source_id)`; retry = same artifact (idempotent upsert).

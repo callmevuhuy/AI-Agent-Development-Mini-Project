@@ -14,21 +14,24 @@
 - Deterministic (chạy được khi bỏ LLM): validate ID, dispatcher, allowlist, schema, tính tổng/tỉ lệ/cờ vượt ngưỡng, approval gate, state transition, idempotent draft, trace.
 - LLM-assisted (có fallback template): trích `trip_id/report_id` từ câu tự nhiên, chọn tool đề xuất, viết narrative trong draft, query rewrite, giải thích cho user.
 
-## 3. Lộ trình (đề xuất 10 ngày, co giãn theo deadline)
+## 3. Lộ trình đầy đủ (10 ngày làm việc)
+Kế hoạch mặc định triển khai đủ phạm vi mini-project. Rubric tính một lần theo 7 hạng mục của đề bài, tổng 100%: framing 10%, mock systems/function calling 20%, workflow/state 15%, RAG 15%, memory/safety 15%, automation/drafts 10%, evaluation/debugging 15%.
+
 | Ngày | Việc | Output | Rubric |
 |---|---|---|---|
-| 1 | Đọc spec, chốt contract, dựng skeleton repo, viết DATA_SPEC | folder + docs | Framing 10% |
-| 2 | Dataset (6 trips, 4 travelers, 4 itineraries, 3 expenses, 12 policy chunks) + mock systems | `data/`, `mock_systems/` | Mock 20% |
-| 3 | Tool wrappers + JSON Schemas + registry + dispatcher + error contract | `tools/`, `schemas/` | Mock/FC 20% |
-| 4 | State, trace, budget, retry, terminal outcomes | `state.py`, `trace.py` | Workflow 15% |
-| 5 | Workflow C (deterministic) rồi A | 2 workflow chạy | Workflow 15% |
-| 6 | Workflow B + approval simulation + 3 loại draft + idempotency | drafts | Automation 10% |
-| 7 | RAG: retriever, citation, claim-evidence check, no-result, injection chunk, version conflict | `rag/` | RAG 15% |
-| 8 | Memory: session, preference (view/delete), isolation; safety tests | `memory/` | Safety 15% |
-| 9 | 15 test cases, eval runner, metrics, baseline report, root cause | `eval/reports` | Eval 15% |
-| 10 | Fix theo root cause, before/after/regression, README, demo, limitations | báo cáo cuối | Tất cả |
+| 1 | Đọc spec, chốt contract, dựng skeleton repo, rà kiến trúc và quyền | skeleton + docs đã chốt | Framing 10% |
+| 2 | Dataset (6 trips, 4 travelers, 4 itineraries, 3 expenses, policy corpus) + mock systems | `data/`, `mock_systems/` | Phần đầu của Mock/FC |
+| 3 | Tool wrappers + JSON Schemas + registry + dispatcher + error contract | `tools/`, `schemas/` | Mock systems & function calling 20% (ngày 2–3) |
+| 4 | State, trace, budget, retry, terminal outcomes | `state.py`, `trace.py` | Nền tảng Workflow/state 15% |
+| 5 | Workflow C rồi A, có dependency và stop conditions | 2 workflow end-to-end | Phần Workflow/state |
+| 6 | Workflow B + approval simulation + ít nhất 3 loại draft + idempotency | 3 workflow end-to-end, drafts | Automation/drafts 10% |
+| 7 | RAG: retriever, citation, claim-evidence check, no-result, injection chunk, version conflict | `rag/` | RAG/grounding 15% |
+| 8 | Memory: session, preference view/delete, isolation; hoàn tất role-scope safety | `memory/`, safety cases | Memory/safety 15% |
+| 9 | Ít nhất 15 test cases, eval runner, đủ metrics, baseline report, root cause | `eval/reports`, traces | Evaluation/debugging 15% |
+| 10 | Sửa theo root cause, after/regression report, README, demo ba workflow, limitations | deliverables hoàn chỉnh | Chốt và kiểm tra toàn rubric |
 
-Nếu thiếu thời gian: giữ thứ tự 1→5→7→9 (đủ acceptance tối thiểu), B và memory nâng cao làm sau.
+### Nhánh rút gọn khi thời gian bị giới hạn
+Rút ngắn độ polish, không bỏ acceptance floor: cả ba workflow chạy end-to-end; dispatcher/schema/authorization/budget/trace; RAG có citation và no-result; memory/isolation; ít nhất ba draft; 15 test bắt buộc; metrics, baseline/after/regression dạng gọn và demo ngắn. Có thể hoãn backend LLM thật, dữ liệu vượt mức tối thiểu, tối ưu retrieval và artifact tùy chọn. Không hoãn Workflow B, memory/isolation hoặc safety tests.
 
 ## 4. Milestone kiểm tra
 - M1 (cuối ngày 3): gọi tool qua dispatcher, bị từ chối đúng với tool lạ/field lạ/ID sai.
@@ -64,3 +67,5 @@ Nếu thiếu thời gian: giữ thứ tự 1→5→7→9 (đủ acceptance tố
 | D6 | Tách `trip_approval_status` và `draft_status`; outcome `awaiting_approval` chỉ khi có approval pending thật | Hết nhập nhằng |
 | D7 | `requirements.json` định nghĩa evidence đủ theo destination | `validate_trip_requirements` thật sự deterministic |
 | D8 | Version conflict: mặc định `needs_human`; chỉ ưu tiên bản mới khi bản cũ `superseded` | T09 kiểm thử được |
+| D9 | Rubric bám đúng 7 trọng số của đề bài; hạng mục mock/function calling chỉ tính một lần | Tổng trọng số luôn 100% |
+| D10 | Approver chỉ xem một approval request pending được application đưa vào review scope; không duyệt hoặc ghi dữ liệu qua agent | Least privilege, kiểm thử cả allowed/denied |

@@ -5,6 +5,7 @@ Draft lifecycle: `draft_created -> awaiting_approval -> approved -> publish_requ
 
 ## Định nghĩa trạng thái (tránh nhầm lẫn)
 - `trip_approval_status`: trạng thái duyệt chuyến từ approval system (`pending | approved | rejected`).
+- `approval_request_status`: trạng thái yêu cầu review do `request_approval` tạo; tool chỉ tạo `pending`, quyết định cuối đến từ fixture/test helper ngoài tool set.
 - `draft_status`: vòng đời artifact (`draft_created -> awaiting_approval -> approved -> publish_requested -> published`).
 - Terminal outcome `awaiting_approval` chỉ dùng khi có approval request đang `pending` thật (trip pending hoặc `request_approval` vừa tạo).
 - `request_approval` chỉ tạo `pending`; không bao giờ trả `approved`.

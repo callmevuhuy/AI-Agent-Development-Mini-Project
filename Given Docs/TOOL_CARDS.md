@@ -1,6 +1,6 @@
 # TOOL_CARDS
 
-`user_context` (user_id, role, session_id) do application gắn vào, KHÔNG nằm trong args của model và model không thể khai báo. Với memory tools, `user_id` và `session_id` luôn lấy từ context; schema của model chỉ nhận `key`/`value` cần thiết. Phân quyền theo role: xem docs/MEMORY_AND_SAFETY.md mục 2.
+`user_context` (user_id, role, session_id; optional application-owned `approval_scope`) do application gắn vào, KHÔNG nằm trong args của model và model không thể khai báo. Dispatcher đối chiếu mọi ID do model đề xuất với scope này trước khi tool đọc dữ liệu. Với memory tools, `user_id` và `session_id` luôn lấy từ context; schema của model chỉ nhận `key`/`value` cần thiết. Phân quyền theo role: xem docs/MEMORY_AND_SAFETY.md mục 2.
 
 Mọi schema: `type: object`, `additionalProperties: false`, có `required`. Kết quả: `{ok, data, meta{source, read_only}}` hoặc `{ok:false, error{code, message, retryable}}`.
 Error codes gợi ý: `invalid_argument, not_found, not_allowed, unauthorized_scope, budget_exceeded, timeout, unavailable`.
