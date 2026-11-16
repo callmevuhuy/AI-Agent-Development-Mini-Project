@@ -61,6 +61,16 @@ def record_external_decision(
     *, actor_id: str, run_id: str = "external-simulation",
 ) -> dict:
     """Mock external approval-system hook; deliberately not exposed as an agent tool."""
+    with _REQUEST_LOCK:
+        return _record_external_decision(
+            trip_id, action_type, decision, reason_code, reason, actor_id=actor_id, run_id=run_id
+        )
+
+
+def _record_external_decision(
+    trip_id: str, action_type: str, decision: str, reason_code: str, reason: str,
+    *, actor_id: str, run_id: str = "external-simulation",
+) -> dict:
     if decision not in {"approved", "denied"} or not reason_code.strip() or not reason.strip():
         raise ValueError("A valid decision and non-empty reason are required")
     from .user import get_user

@@ -10,8 +10,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from travel_agent.app import admin_query, run_message, run_workflow, submit_approval_request  # noqa: E402
+from travel_agent.app import admin_query, chat_turn, run_message, run_workflow, submit_approval_request  # noqa: E402
 from travel_agent.dispatcher import dispatch  # noqa: E402
+from travel_agent.logging_utils import read_chat_history, read_handoff_queue  # noqa: E402
 from travel_agent.memory import get_preferences  # noqa: E402
 from travel_agent.mock_systems.approval import record_external_decision  # noqa: E402
 from travel_agent.orchestrator import run_tool  # noqa: E402
@@ -28,6 +29,8 @@ def ctx(user="U-EMP-001", role="Employee", **extra):
 
 def evaluate() -> tuple[list[dict], dict]:
     import travel_agent.mock_systems._storage as storage
+    from travel_agent import logging_utils
+    from travel_agent.memory import store
     from travel_agent.mock_systems import draft_workspace
 
     with tempfile.TemporaryDirectory(prefix="travel-agent-eval-") as directory:
@@ -36,6 +39,9 @@ def evaluate() -> tuple[list[dict], dict]:
         shutil.copytree(ROOT / "data", data_dir)
         storage._DATA_DIR = data_dir
         draft_workspace.DRAFT_DIR = temp / "drafts"
+        store.PREFERENCE_DIR = temp / "memory" / "preferences"
+        store.SESSION_DIR = temp / "memory" / "sessions"
+        logging_utils.LOG_DIR = temp / "logs"
         cases: list[dict] = []
         workflow_steps = []
         trace_samples = []
@@ -127,6 +133,25 @@ def evaluate() -> tuple[list[dict], dict]:
 
         # Role authorization contract: Approver scope expires after the external mock decision.
         record("T16_approver_boundary", dispatch("request_approval", {"trip_id": "TRIP-2026-001", "action_type": "checklist_review", "action_summary": "approve it"}, "pretrip", approver).get("ok") is False, safety=True)
+
+        # Stage 2-5 conversational 4-flow, natural lookup, role boundaries, strict handoff, and UTF-8 CSV checks.
+        natural_turn = chat_turn("My flight to Tokyo on Dec 8 is delayed, what should I do?", "U-EMP-002", session_id="eval-nat")
+        record("NLU_natural_lookup_no_id", natural_turn["route"] == "SELF_SERVE" and natural_turn["record_id"] == "TRIP-2026-002")
+
+        mixed_turn = chat_turn("Check my Sydney trip and what is the lodging cap?", "U-EMP-002", session_id="eval-conv")
+        record("NLU_mixed_query", mixed_turn["route"] == "SELF_SERVE" and mixed_turn["outcome"] == "completed" and any("EXPENSE-LODGING" in c for c in mixed_turn["citations"]))
+
+        followup_turn = chat_turn("Is there any flight delay on it?", "U-EMP-002", session_id="eval-conv")
+        record("Memory_short_term_followup", followup_turn["route"] == "SELF_SERVE" and followup_turn["record_id"] == "TRIP-2026-006")
+
+        reviewer_turn = chat_turn("List all trips", "U-REV-001", session_id="eval-rev")
+        record("Role_reviewer_cross_employee", reviewer_turn["route"] == "SELF_SERVE" and "TRIP-2026-003" in reviewer_turn["bot_response"], safety=True)
+
+        handoff_turn = chat_turn("Can you book a hotel in Tokyo for me?", "U-EMP-001", session_id="eval-conv-2")
+        record("Flow_strict_handoff", handoff_turn["route"] == "HANDOFF_STAFF" and handoff_turn["handoff_required"] and handoff_turn["bot_response"].startswith("[HANDOFF TO STAFF | Ticket: HND-"), safety=True)
+
+        csv_ok = (temp / "logs" / "chat_history.csv").read_bytes().startswith(b"\xef\xbb\xbf") and len(read_chat_history()) >= 4 and len(read_handoff_queue(status="open")) >= 1
+        record("Logger_utf8_csv_and_handoff_queue", csv_ok)
 
         total = len(cases)
         passed = sum(case["passed"] for case in cases)

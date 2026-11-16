@@ -39,12 +39,12 @@ Rút ngắn độ polish, không bỏ acceptance floor: cả ba workflow chạy 
 - M3 (cuối ngày 8): citation truy vết được, isolation pass.
 - M4 (cuối ngày 10): acceptance tests, reports before/after and regression comparison.
 
-## 4.1 Trạng thái repo (2026-11-09)
-- Mốc 1–5: mock systems, schemas/dispatcher, ba workflow, draft idempotency, offline RAG, scoped memory, Approver scope và Admin/RAG ACL đã triển khai.
-- Mốc 6: automated tests và 25 evaluation cases; baseline/after đạt 25/25. Metrics, case results, sample traces (kèm case_id) và regression report được lưu dưới `eval/`.
-- Có application CLI và deterministic planner cho request được hỗ trợ; không có LLM backend thật (test vẫn chạy offline).
-- Baseline được đo lần đầu sau khi hoàn thiện các phần mở rộng; không có số liệu trước thay đổi để đối chiếu historical before/after.
-- Admin read-only, append-only local audit events và role-filtered RAG được kiểm tra trong tests; các mở rộng không cấp quyền approve/reject cho Agent.
+## 4.1 Trạng thái repo (2026-11-16)
+- Mốc 1–5: mock systems, schemas/dispatcher (19 tools), ba workflow, draft idempotency, offline RAG (stemming + domain synonyms + ACL), scoped memory (kèm TTL), Approver scope và Admin/RAG ACL đã triển khai.
+- Mốc 6 & Gói hoàn thiện bàn giao: 53 automated pytest cases và 31/31 evaluation cases (`eval/reports/`), English NLU router (`nlu.py`) hỗ trợ tra cứu tự nhiên không cần ID, 4-flow orchestrator (`conversation.py`) kèm strict Staff Handoff, UTF-8 BOM CSV logger (`logging_utils.py`), và zero-dependency Web Demo UI (`web_demo.py`).
+- Có application CLI (`message`, `chat`, `run`, `handoffs`, `logs`, `web`) và deterministic NLU cho request tiếng Anh; không có LLM backend thật (test chạy hoàn toàn offline).
+- Baseline được đo lần đầu ở mốc 25 cases; bản `after` đạt 31/31 (0 regression).
+- Admin read-only, append-only local audit events, và role-filtered RAG được kiểm tra trong tests; Web Demo bổ sung endpoint reset dữ liệu runtime (`POST /api/admin/reset`) và xuất CSV chỉ dành cho Admin (không nằm trong agent tool set).
 
 ## 5. Rủi ro và cách giảm
 | Rủi ro | Giảm thiểu |

@@ -2,6 +2,68 @@
 
 Project-level history. Dates are recorded when known; earlier milestone dates were not retained in the handoff context.
 
+## 2026-11-16 — Documentation sync, requirements update, and clean release state
+
+- Updated `requirements.txt` to include `jsonschema>=4.23`, `pytest>=8.0`, and `-e .` for single-step installation.
+- Rewrote `README.md` with a neutral technical tone and `pip install -r requirements.txt` setup flow.
+- Synchronized `Given Docs/` (`README.md`, `TOOL_CARDS.md`, `WORKFLOWS.md`, `MEMORY_AND_SAFETY.md`, `PLAN.md`, `TEST_MATRIX.md`) with the 19 registered tools, 4-flow routing, TTL session state, CSV logging, and Web Demo Admin controls.
+- Restored `data/audit_events.json` to clean seed records prior to commit.
+
+## 2026-11-16 — Issue fixes: Traveler details across all replies & detailed missing-checklist status breakdown
+
+- Added `get_traveler_profile` to `intrip` and `posttrip` workflow allowlists (`src/travel_agent/registry.py`) and enriched authorized responses in `src/travel_agent/conversation.py` (`_enrich_trip_and_traveler`, `_trip_details_block`, `_format_trip_choice`, `_verified_facts`) so `Traveler: <Name> (<EMP-ID> · <Department>)` is displayed consistently across pre-trip, in-trip, post-trip, Reviewer lists, and Staff Handoff summaries (while preserving Approver/Admin profile boundaries).
+- Added `_format_clarify_workflow` in `src/travel_agent/conversation.py` (with `validation` returned on missing-field stop in `a_pretrip.py` and `report` returned in `c_posttrip.py`) so `needs_input` replies explicitly report current checklist/review status, approval status, destination policy config, and exact missing fields/receipts.
+- Expanded `tests/test_conversational_and_fixes.py` to cover both fixes.
+
+## 2026-11-16 — Bugfix: Flight/departure date validation during natural-language lookup
+
+- Investigated `data/logs/chat_history.csv`: asking `"My flight to Tokyo on Dec 9 is delayed..."` incorrectly matched `TRIP-2026-002` because `list_my_trips` checked `start_date <= date <= end_date` (`2026-12-08..2026-12-12`), ignoring that flight `MOCK-202` only flies on `2026-12-08`.
+- Fixed `src/travel_agent/conversation.py` (`_resolve_natural_record`) to verify actual `flight.departure` / `flight.arrival` dates via `get_itinerary` for `intrip` flight queries and `trip.start_date` for `pretrip` queries, returning a `CLARIFY` prompt with exact recorded dates when mismatched.
+- Extended `src/travel_agent/nlu.py` to also parse `YYYY/MM/DD` and `DD Month [YYYY]` (e.g. `9 Dec`) formats.
+- Added regression assertions in `tests/test_conversational_and_fixes.py`.
+
+## 2026-11-16 — Stage 5: Natural-language lookup (no raw IDs required), rich formatting, role showcase, Admin reset/export guard, and rewritten README
+
+- Added scoped read-only lookup tools `list_my_trips` and `list_my_expenses` (Employee own-only, Reviewer all-records, Admin/Approver denied) with JSON schemas, dispatcher/registry/trace integration.
+- Upgraded `src/travel_agent/nlu.py` and `src/travel_agent/conversation.py` to resolve natural English prompts without raw IDs via destination aliases, explicit dates, and relative dates (`today`/`tomorrow` using `config.get_demo_today()`), clarifying cleanly when multiple or zero trips match.
+- Improved answer formatting with readable line breaks, corpus `source` labels alongside citations, and natural-language trip/flight details (Route, Departure/Arrival times, Airport, and Flight/Trip Status).
+- Upgraded `src/travel_agent/web_demo.py`: added `U-APR-001` (Approver) scope support, role-specific sample prompts, automatic chat reset when switching users, Admin-only visibility and server-side `403` enforcement for CSV exports and the **Reset Trace, Memory & Logs** button (`POST /api/admin/reset`).
+- Added `demo/DEMO_SCENARIOS.md`, updated `demo/run_demo.ps1`, and rewrote `README.md` for straightforward third-party setup and reproduction.
+- Expanded `tests/test_conversational_and_fixes.py` (53 total pytest cases) and `eval/run_eval.py`. No commit or push performed.
+
+## 2026-11-16 — Stage 4: Zero-dependency Web Demo UI, expanded test/eval suite, and documentation sync
+
+- Added `src/travel_agent/web_demo.py` and `demo/web_demo.py` (plus `python -m travel_agent.app web`) providing an interactive browser UI using Python stdlib `http.server` (Chat, Role/User Switcher, Trace & Memory Inspector, Staff Handoff Queue, and UTF-8 CSV export downloads).
+- Updated `demo/run_demo.ps1` to demonstrate all workflows, strict Staff Handoff, and CSV queue viewing.
+- Added `tests/test_conversational_and_fixes.py` (8 comprehensive test cases covering Stage 1–4 fixes, English NLU, mixed queries, synonym RAG, short/long-term memory + TTL, strict handoff template, UTF-8 BOM CSV logging, and Web Demo HTTP endpoints).
+- Expanded `eval/run_eval.py` from 25 to 29 cases and verified `after` evaluation (29/29 passed, 0 regressions).
+- Updated `.gitignore`, `README.md`, `HANDOFF.md`, `TODO.md`, and `Given Docs/` (`ARCHITECTURE.md`, `WORKFLOWS.md`, `MEMORY_AND_SAFETY.md`, `TEST_MATRIX.md`).
+- Verified: `pytest -v` (51 passed), `eval/run_eval.py --label after` (29/29 passed), `compileall`, and `git diff --check`. No commit or push performed.
+
+## 2026-11-16 — Stage 3: Memory optimization, 4-flow orchestrator, strict handoff guard, and UTF-8 CSV logger
+
+- Enhanced `src/travel_agent/memory/store.py` with `active_report_id`, `pending_slot`, `delete_session_value`, and session TTL (`_expires_at`), plus automatic test/temp directory isolation via `_storage._DATA_DIR`.
+- Added `src/travel_agent/logging_utils.py` to log every turn to `data/logs/chat_history.csv` (UTF-8 BOM for Excel) and escalated cases to `data/logs/handoff_queue.csv` with sensitive-token redaction while keeping `audit_events.json` raw-message free.
+- Added `src/travel_agent/conversation.py` implementing the 4-flow engine (`SELF_SERVE`, `CLARIFY`, `HANDOFF_STAFF`, `REJECT_SAFETY`), multi-turn session resolution, `preferred_output_format` response formatting, explicit preference management, and strict deterministic Staff Handoff templates (zero speculative explanations).
+- Updated `src/travel_agent/app.py` with `chat_turn()`, interactive `chat` CLI, `handoffs`, `logs`, and updated `message` CLI command.
+- Verified: `pytest -q` (43 passed). No commit or push performed.
+
+## 2026-11-16 — Stage 2: English NLU router and enhanced offline RAG
+
+- Added `src/travel_agent/nlu.py` with NFKC normalization, canonical & malformed ID detection, explicit preference command parsing, clause splitting for mixed workflow + policy queries, safety/adversarial detection, and 4-route classification (`SELF_SERVE`, `CLARIFY`, `HANDOFF_STAFF`, `REJECT_SAFETY`).
+- Refactored `src/travel_agent/planner.py` to delegate to `nlu.route_message_intent` while keeping deterministic `plan()` compatibility.
+- Upgraded `src/travel_agent/rag/retriever.py` with light English stemming, curated English domain synonym expansion (`hotel->lodging`, `food->meals`, `late->delay`, etc.), and expanded prompt-injection exclusion patterns.
+- Verified: `pytest -q` (43 passed). No commit or push performed.
+
+## 2026-11-16 — Stage 1: Core bug fixes, config centralization, and hardening
+
+- Added `src/travel_agent/config.py` to centralize `DATA_DIR`, `DRAFT_DIR`, `MEMORY_DIR`, `LOG_DIR`, and budget/TTL defaults with env-var overrides.
+- Fixed `calculate_expense_summary.py` and `workflows/c_posttrip.py` so `within_all_active_versions` meal items remain in `threshold_evaluations` without falsely triggering `threshold_flags` / `needs_human`.
+- Fixed `workflows/a_pretrip.py` to evaluate blocking travel/approval statuses (`cancelled`/`rejected`) before stopping on `unknown_destination_requirements`, and raised `MAX_ALLOWED_STEPS` to 12 (default remains 8).
+- Hardened `tools/_draft.py` (verify source trip/expense exists before creating drafts), `schemas/validate_trip_requirements.json` (`trip_id` required inside `trip_facts`), `trace.py` (`safe_arguments` for all 3 draft tools), `dispatcher.py` (unused import removed), and `mock_systems/approval.py` (`_REQUEST_LOCK` on `record_external_decision`).
+- Fixed duplicate `U-ADM-001` row in `Given Docs/DATA_SPEC.md`.
+- Verified: `pytest -q` (43 passed). No commit or push performed.
+
 ## 2026-11-09 — Phase 6 and remaining TODOs completed
 
 - Added deterministic application/planner entry points and a CLI demo for all three workflows, pending-only approval requests, and Admin read views.

@@ -68,6 +68,7 @@ def run(arguments: dict[str, Any], *, user_context: dict[str, Any] | None = None
                 "policy_refs": [candidate["chunk_id"] for candidate in candidates if candidate["currency"] == currency],
             })
 
+    threshold_evaluations = []
     threshold_flags = []
     for date, amount in sorted(daily_meals.items()):
         candidates = [c for c in rules.get(("meals", "per_traveler_per_day"), []) if c["currency"] == currency]
@@ -76,7 +77,7 @@ def run(arguments: dict[str, Any], *, user_context: dict[str, Any] | None = None
             status = "exceeds_all_active_versions" if amount > max(caps) else (
                 "exceeds_some_active_versions" if amount > min(caps) else "within_all_active_versions"
             )
-            threshold_flags.append({
+            entry = {
                 "category": "meals",
                 "measure": "per_traveler_per_day",
                 "date": date,
@@ -84,23 +85,29 @@ def run(arguments: dict[str, Any], *, user_context: dict[str, Any] | None = None
                 "currency": currency,
                 "status": status,
                 "policy_refs": [c["chunk_id"] for c in candidates],
-            })
+            }
+            threshold_evaluations.append(entry)
+            if status != "within_all_active_versions":
+                threshold_flags.append(entry)
 
     lodging_rules = [c for c in rules.get(("lodging", "per_night"), []) if c["currency"] == currency]
     for item in report["line_items"]:
         amount = item.get("amount")
         if item.get("category") == "lodging" and lodging_rules and isinstance(amount, (int, float)) and not isinstance(amount, bool):
             cap = min(rule["cap"] for rule in lodging_rules)
-            if amount > cap:
-                threshold_flags.append({
-                    "category": "lodging",
-                    "measure": "per_night",
-                    "item_id": item.get("item_id"),
-                    "amount": round(amount, 2),
-                    "currency": currency,
-                    "status": "exceeds_all_active_versions",
-                    "policy_refs": [rule["chunk_id"] for rule in lodging_rules],
-                })
+            exceeds = amount > cap
+            entry = {
+                "category": "lodging",
+                "measure": "per_night",
+                "item_id": item.get("item_id"),
+                "amount": round(amount, 2),
+                "currency": currency,
+                "status": "exceeds_all_active_versions" if exceeds else "within_all_active_versions",
+                "policy_refs": [rule["chunk_id"] for rule in lodging_rules],
+            }
+            threshold_evaluations.append(entry)
+            if exceeds:
+                threshold_flags.append(entry)
 
     data = {
         "report_id": report["report_id"],
@@ -113,5 +120,6 @@ def run(arguments: dict[str, Any], *, user_context: dict[str, Any] | None = None
         "invalid_items": invalid_items,
         "threshold_conflicts": conflicts,
         "threshold_flags": threshold_flags,
+        "threshold_evaluations": threshold_evaluations,
     }
     return success(data, "mock_expense_system+mock_policy_knowledge_base")

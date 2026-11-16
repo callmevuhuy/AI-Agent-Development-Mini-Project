@@ -19,16 +19,27 @@ def safe_arguments(tool_name: str, arguments: Any) -> dict[str, Any]:
     if not isinstance(arguments, dict):
         return {}
     safe: dict[str, Any] = {}
-    if tool_name in {"get_trip_request", "get_itinerary", "get_approval_status", "request_approval", "admin_get_audit_history"}:
+    if tool_name in {
+        "get_trip_request", "get_itinerary", "get_approval_status", "request_approval",
+        "create_travel_checklist_draft", "create_escalation_or_support_draft", "admin_get_audit_history",
+    }:
         if "trip_id" in arguments or tool_name != "admin_get_audit_history":
             safe["trip_id"] = _safe_id(arguments.get("trip_id"), _TRIP_ID)
-        if tool_name == "admin_get_audit_history":
-            safe["report_id"] = _safe_id(arguments.get("report_id"), _EXPENSE_ID) if "report_id" in arguments else None
+        if tool_name == "admin_get_audit_history" and "report_id" in arguments:
+            safe["report_id"] = _safe_id(arguments.get("report_id"), _EXPENSE_ID)
         if tool_name == "request_approval":
             safe["action_type"] = arguments.get("action_type") if arguments.get("action_type") in {"checklist_review", "escalation", "publish_request"} else "[invalid]"
+    elif tool_name == "list_my_trips":
+        if isinstance(arguments.get("destination"), str):
+            safe["destination"] = arguments["destination"][:40]
+        if isinstance(arguments.get("date"), str):
+            safe["date"] = arguments["date"]
+    elif tool_name == "list_my_expenses":
+        if "trip_id" in arguments:
+            safe["trip_id"] = _safe_id(arguments.get("trip_id"), _TRIP_ID)
     elif tool_name == "admin_list_trips":
         safe = {}
-    elif tool_name in {"get_expense_report", "calculate_expense_summary"}:
+    elif tool_name in {"get_expense_report", "calculate_expense_summary", "create_expense_review_draft"}:
         safe["report_id"] = _safe_id(arguments.get("report_id"), _EXPENSE_ID)
     elif tool_name == "get_traveler_profile":
         safe["traveler_id"] = _safe_id(arguments.get("traveler_id"), _TRAVELER_ID)

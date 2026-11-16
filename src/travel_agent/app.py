@@ -3,7 +3,9 @@ from typing import Any
 from datetime import datetime, timezone
 import re
 
+from travel_agent.conversation import handle_turn
 from travel_agent.dispatcher import dispatch
+from travel_agent.logging_utils import read_chat_history, read_handoff_queue
 from travel_agent.mock_systems.approval import get_approval_request
 from travel_agent.mock_systems.approval import record_audit_event
 from travel_agent.mock_systems.user import get_user
@@ -104,6 +106,17 @@ def run_message(message: str, user_id: str, *, session_id: str = "demo-session")
     return result, state
 
 
+def chat_turn(
+    message: str,
+    user_id: str,
+    *,
+    session_id: str = "demo-session",
+    approval_scope: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Run one 4-flow conversational turn with short/long-term memory and UTF-8 CSV logging."""
+    return handle_turn(message, user_id, session_id=session_id, approval_scope=approval_scope)
+
+
 def cli() -> None:
     import argparse
     import json
@@ -115,9 +128,13 @@ def cli() -> None:
     workflow.add_argument("--user", required=True)
     workflow.add_argument("--id", dest="record_id")
     workflow.add_argument("--approval-action", choices=["checklist_review", "escalation", "publish_request"])
-    message = commands.add_parser("message", help="Route a supported natural-language request with the deterministic planner")
+    message = commands.add_parser("message", help="Route a natural-language English request through the 4-flow engine")
     message.add_argument("--user", required=True)
     message.add_argument("--text", required=True)
+    message.add_argument("--session", default="demo-session")
+    chat = commands.add_parser("chat", help="Start an interactive multi-turn CLI chat session")
+    chat.add_argument("--user", required=True)
+    chat.add_argument("--session", default="cli-session")
     request = commands.add_parser("request-approval", help="Create a pending-only mock approval request")
     request.add_argument("--user", required=True)
     request.add_argument("--trip", required=True)
@@ -129,18 +146,49 @@ def cli() -> None:
     audit.add_argument("--user", required=True)
     audit.add_argument("--trip")
     audit.add_argument("--report")
+    handoffs = commands.add_parser("handoffs", help="View staff handoff queue logged in CSV")
+    handoffs.add_argument("--status", choices=["open", "resolved"])
+    logs = commands.add_parser("logs", help="View recent chat history logged in UTF-8 CSV")
+    logs.add_argument("--limit", type=int, default=20)
+    web = commands.add_parser("web", help="Launch zero-dependency local Web Demo UI")
+    web.add_argument("--host", default="127.0.0.1")
+    web.add_argument("--port", type=int, default=8080)
     args = parser.parse_args()
     if args.command == "run":
         result, state = run_workflow(args.workflow, args.user, args.record_id, approval_action_type=args.approval_action)
+        print(json.dumps({"result": result, "trace": state.trace}, ensure_ascii=False, indent=2))
     elif args.command == "message":
-        result, state = run_message(args.text, args.user)
+        turn = chat_turn(args.text, args.user, session_id=args.session)
+        print(json.dumps(turn, ensure_ascii=False, indent=2))
+    elif args.command == "chat":
+        print(f"Interactive Travel Ops Chat (user={args.user}, session={args.session}). Type 'exit' to quit.")
+        while True:
+            try:
+                user_text = input("You> ").strip()
+            except EOFError:
+                break
+            if not user_text or user_text.lower() in {"exit", "quit"}:
+                break
+            turn = chat_turn(user_text, args.user, session_id=args.session)
+            print(f"[{turn['route']} | {turn['outcome']}]")
+            print(turn["bot_response"])
+            print()
     elif args.command == "request-approval":
         result, state = submit_approval_request(args.user, args.trip, args.action, args.summary)
+        print(json.dumps({"result": result, "trace": state.trace}, ensure_ascii=False, indent=2))
     elif args.command == "admin-trips":
         result, state = admin_query(args.user, "admin_list_trips")
-    else:
+        print(json.dumps({"result": result, "trace": state.trace}, ensure_ascii=False, indent=2))
+    elif args.command == "admin-audit":
         result, state = admin_query(args.user, "admin_get_audit_history", {key: value for key, value in (("trip_id", args.trip), ("report_id", args.report)) if value})
-    print(json.dumps({"result": result, "trace": state.trace}, ensure_ascii=False, indent=2))
+        print(json.dumps({"result": result, "trace": state.trace}, ensure_ascii=False, indent=2))
+    elif args.command == "handoffs":
+        print(json.dumps(read_handoff_queue(status=args.status), ensure_ascii=False, indent=2))
+    elif args.command == "logs":
+        print(json.dumps(read_chat_history(limit=args.limit), ensure_ascii=False, indent=2))
+    else:
+        from travel_agent.web_demo import serve
+        serve(host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

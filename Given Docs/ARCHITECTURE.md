@@ -77,7 +77,8 @@ flowchart TD
 - `user_context` và `approval_scope` (nếu là lượt review Approver) đến từ application, không từ model. Approver chỉ đọc packet và facts liên quan tới đúng request pending trong scope. Source of truth của trip/itinerary/approval/expense luôn là mock systems.
 - Retrieved text là untrusted; không thay đổi allowlist, role hay outcome.
 
-## 6. Authorization extensions
+## 6. Authorization & Conversational Extensions
 - `request_approval` is an Employee-only, owner-scoped tool that creates one pending request per `(trip_id, action_type)`. Only the external mock approval helper changes a decision; it appends an audit event with actor, reason, timestamp and run ID.
 - Admin has read-only `admin_list_trips` and `admin_get_audit_history`. No approval, draft, memory, policy RAG, or business-write tool is allowed.
 - Policy chunks carry `classification` and `allowed_roles`. The policy KB filters by role before BM25 ranking, version conflict calculation, and citation generation. Approver access additionally requires a pending action scope and category permission.
+- Conversational entrypoints route English user requests through `src/travel_agent/nlu.py` and `src/travel_agent/conversation.py` into 4 strict routes (`SELF_SERVE`, `CLARIFY`, `HANDOFF_STAFF`, `REJECT_SAFETY`). Escalations use a deterministic Staff Handoff template (never improvised explanations) and log to UTF-8 BOM CSV (`data/logs/chat_history.csv`, `data/logs/handoff_queue.csv`).

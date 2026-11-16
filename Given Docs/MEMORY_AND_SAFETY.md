@@ -4,7 +4,7 @@
 | Loại | Scope | Ví dụ | Lưu ở đâu |
 |---|---|---|---|
 | Run state | `run_id` | step_count, trace, outcome | RAM + `eval/traces/` |
-| Session state | `user_id` + `session_id` | `active_trip_id` | `session_store` (xóa khi hết session) |
+| Session state | `user_id` + `session_id` | `active_trip_id`, `active_report_id`, `last_workflow`, `pending_slot` (with TTL) | `session_store` (xóa khi hết TTL/session) |
 | Persistent preference | `user_id` | `response_language`, `preferred_output_format` | `preference_store`, CHỈ khi user yêu cầu lưu |
 
 Source of truth: mock systems. Trip status, itinerary, approval, expense luôn đọc lại qua tool; memory không được thay thế.
@@ -38,8 +38,8 @@ Application gắn `user_context = {user_id, role, session_id}` từ `users.json`
 - Test bắt buộc: Employee A đọc trip của B (bị chặn), Employee gọi draft của trip người khác, Approver đọc đúng packet/facts trong scope pending (cho phép), Approver đọc dữ liệu ngoài scope hoặc tạo draft/request approval (bị chặn), Reviewer đọc mọi trip (cho phép).
 
 ## 3. API memory
-Internal API nhận `user_context` từ application: `get_preferences(context)`, `get_preference(context, key)`, `set_preference(context, key, value)`, `delete_preference(context, key)`, `get_session_state(context)`, `set_session_value(context, key, value)`, `clear_session(context)`. Tool schema không nhận `user_id` hay `session_id` từ model.
-Preference keys chỉ gồm `response_language` (`en|vi`) và `preferred_output_format` (`concise|detailed`). Ghi/xóa preference cần `memory_write_authorized=true` do application đặt khi user yêu cầu rõ ràng; model không thể tự đặt cờ này trong args. Session chỉ lưu `active_trip_id` và `last_workflow`, scoped theo user + session, không phải nguồn sự thật cho trip. Mọi hàm kiểm tra context; truy cập chéo user/session bị từ chối.
+Internal API nhận `user_context` từ application: `get_preferences(context)`, `get_preference(context, key)`, `set_preference(context, key, value)`, `delete_preference(context, key)`, `get_session_state(context)`, `set_session_value(context, key, value)`, `delete_session_value(context, key)`, `clear_session(context)`. Tool schema không nhận `user_id` hay `session_id` từ model.
+Preference keys chỉ gồm `response_language` (`en|vi`) và `preferred_output_format` (`concise|detailed`). Ghi/xóa preference cần `memory_write_authorized=true` do application đặt khi user yêu cầu rõ ràng; model không thể tự đặt cờ này trong args. Session lưu `active_trip_id`, `active_report_id`, `last_workflow`, và `pending_slot` kèm TTL (`_expires_at`), scoped theo user + session, không phải nguồn sự thật cho trip. Mọi hàm kiểm tra context; truy cập chéo user/session bị từ chối.
 
 ## 4. Safety controls
 | Lớp | Cách làm |
@@ -48,11 +48,11 @@ Preference keys chỉ gồm `response_language` (`en|vi`) và `preferred_output_
 | Tool allowlist | Per-workflow; tool ngoài list bị từ chối trước execution |
 | Validation | JSON Schema + domain + output check |
 | Least privilege | Tool read-only hoặc draft-only; không file/network/shell tự do |
-| Budgets | max_steps=8, retry<=2, top_k<=5, rewrite<=1 |
+| Budgets | max_steps=8 (trần cho phép MAX_ALLOWED_STEPS=12), retry<=2, top_k<=5, rewrite<=1 |
 | Data boundary | Chỉ dataset training; isolation user/session |
 | Approval | `request_approval` chỉ tạo record `pending`; pending/rejected => không action nào; agent không có tool duyệt |
 | Prompt injection | User text + chunk là data; strip/flag chuỗi kiểu "ignore previous instructions"; không cho chunk đổi allowlist hay gọi tool |
-| Audit | Trace whitelist field; append-only mock events cho workflow, request và decision; không lưu raw message, secret hay PII thật |
+| Audit | Trace whitelist field; append-only mock events (`audit_events.json`) không lưu raw message/secret/PII; tách riêng CSV conversation logger (`chat_history.csv`, `handoff_queue.csv` UTF-8 BOM) có che số thẻ/secret cho vận hành bàn giao |
 
 ## 5. Xử lý injection
 - Input user: dispatcher không cho tool ngoài allowlist dù user ép; planner chỉ chọn từ tool list của workflow.

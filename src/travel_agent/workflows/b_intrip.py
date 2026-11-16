@@ -35,10 +35,22 @@ def run_intrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
     flight = itinerary.get("flight", {})
     if not isinstance(flight, dict):
         return _stop(state, "partial", "The itinerary flight facts are malformed.", trip_id=trip_id)
+    flight_facts = {
+        key: flight[key]
+        for key in ("flight_id", "origin", "origin_airport", "destination", "destination_airport", "status", "departure", "arrival")
+        if key in flight
+    }
+    hotel_facts = itinerary.get("hotel") if isinstance(itinerary.get("hotel"), dict) else None
     if not disruption:
         if flight.get("status") == "cancelled":
-            return _stop(state, "needs_human", "The flight is marked cancelled, but the itinerary has no disruption details.", trip_id=trip_id)
-        return _stop(state, "completed", "No disruption is recorded in the itinerary.", trip_id=trip_id)
+            return _stop(
+                state, "needs_human", "The flight is marked cancelled, but the itinerary has no disruption details.",
+                trip_id=trip_id, flight_facts=flight_facts, hotel=hotel_facts,
+            )
+        return _stop(
+            state, "completed", "No disruption is recorded in the itinerary.",
+            trip_id=trip_id, flight_facts=flight_facts, hotel=hotel_facts,
+        )
 
     state.set_phase("intrip_policy_retrieval")
     policy_result = run_tool(state, "search_travel_policy", {
@@ -66,11 +78,7 @@ def run_intrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
     support_draft = {
         "trip_id": trip_id,
         "disruption": disruption,
-        "flight_facts": {
-            key: flight[key]
-            for key in ("flight_id", "origin", "destination", "status", "departure", "arrival")
-            if key in flight
-        },
+        "flight_facts": flight_facts,
         "policy_evidence": evidence,
         "recommended_follow_up": follow_up if grounding["grounded"] else None,
         "grounding": grounding,
@@ -92,4 +100,4 @@ def run_intrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
         outcome, message = "needs_human", "A cancelled flight may require rebooking or lodging decisions by a human."
     else:
         outcome, message = "completed", "Safe delay guidance is ready; no booking, spending, or external contact was made."
-    return _stop(state, outcome, message, support_draft=support_draft, draft=draft_result["data"])
+    return _stop(state, outcome, message, support_draft=support_draft, hotel=hotel_facts, draft=draft_result["data"])

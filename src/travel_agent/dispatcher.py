@@ -3,9 +3,9 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from travel_agent.config import DEFAULT_MAX_STEPS, MAX_ALLOWED_STEPS
 from travel_agent.mock_systems.approval import get_approval_request
 from travel_agent.mock_systems.expense import get_expense_report
-from travel_agent.mock_systems.traveler import get_traveler_profile
 from travel_agent.mock_systems.trip import get_trip_request
 from travel_agent.mock_systems.user import get_user
 from travel_agent.registry import TOOL_REGISTRY, WORKFLOW_ALLOWLISTS
@@ -143,7 +143,7 @@ def dispatch(
     user_context: dict[str, Any],
     *,
     steps_used: int = 0,
-    max_steps: int = 8,
+    max_steps: int = DEFAULT_MAX_STEPS,
     run_id: str = "direct-dispatch",
 ) -> dict[str, Any]:
     if not isinstance(tool_name, str) or not isinstance(workflow, str):
@@ -171,13 +171,16 @@ def dispatch(
         or not isinstance(steps_used, int)
         or not isinstance(max_steps, int)
         or max_steps < 1
-        or max_steps > 8
+        or max_steps > MAX_ALLOWED_STEPS
         or steps_used < 0
         or steps_used >= max_steps
     ):
         return failure("budget_exceeded", "The run has no remaining tool-call budget.")
     try:
-        if tool_name in _MEMORY_TOOLS or tool_name in {"search_travel_policy", "validate_trip_requirements", "calculate_expense_summary"}:
+        if tool_name in _MEMORY_TOOLS or tool_name in {
+            "search_travel_policy", "validate_trip_requirements", "calculate_expense_summary",
+            "list_my_trips", "list_my_expenses",
+        }:
             result = spec.handler(arguments, user_context=user_context)
         elif tool_name == "request_approval":
             result = spec.handler(arguments, user_context=user_context, run_id=run_id)

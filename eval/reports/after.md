@@ -6,8 +6,8 @@ Deterministic mock evaluation; no live services or real employee data.
 
 | Metric | Result |
 |---|---:|
-| case_count | 25 |
-| passed | 25 |
+| case_count | 31 |
+| passed | 31 |
 | failed | 0 |
 | task_completion_rate | 1.0 |
 | tool_selection_accuracy | 1.0 |
@@ -45,6 +45,12 @@ Deterministic mock evaluation; no live services or real employee data.
 | RAG_role_acl | PASS |  |
 | T18_citation_grounding | PASS | citations=1 |
 | T16_approver_boundary | PASS |  |
+| NLU_natural_lookup_no_id | PASS |  |
+| NLU_mixed_query | PASS |  |
+| Memory_short_term_followup | PASS |  |
+| Role_reviewer_cross_employee | PASS |  |
+| Flow_strict_handoff | PASS |  |
+| Logger_utf8_csv_and_handoff_queue | PASS |  |
 
 ## Interpretation
 

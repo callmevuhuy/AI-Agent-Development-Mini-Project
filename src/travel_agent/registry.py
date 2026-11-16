@@ -15,6 +15,8 @@ from travel_agent.tools import (
     get_preference,
     get_traveler_profile,
     get_trip_request,
+    list_my_expenses,
+    list_my_trips,
     admin_get_audit_history,
     admin_list_trips,
     request_approval,
@@ -50,6 +52,8 @@ _TOOL_DEFINITIONS = {
     "request_approval": (request_approval.run, "Create an idempotent pending-only mock approval request."),
     "admin_list_trips": (admin_list_trips.run, "Read all mock trips; Admin only."),
     "admin_get_audit_history": (admin_get_audit_history.run, "Read append-only mock activity history; Admin only."),
+    "list_my_trips": (list_my_trips.run, "List trips visible to the signed-in Employee (own only) or Reviewer (all)."),
+    "list_my_expenses": (list_my_expenses.run, "List expense reports visible to the signed-in Employee (own only) or Reviewer (all)."),
 }
 
 TOOL_REGISTRY = {
@@ -63,9 +67,9 @@ TOOL_REGISTRY = {
 
 # Keep each workflow's exposed function list limited to its implemented tools.
 WORKFLOW_ALLOWLISTS = {
-    "pretrip": frozenset({"get_trip_request", "get_approval_status", "get_traveler_profile", "search_travel_policy", "validate_trip_requirements", "create_travel_checklist_draft", "request_approval", "get_preference", "set_preference", "delete_preference"}),
-    "intrip": frozenset({"get_itinerary", "search_travel_policy", "create_escalation_or_support_draft", "request_approval", "get_preference", "set_preference", "delete_preference"}),
-    "posttrip": frozenset({"get_expense_report", "calculate_expense_summary", "search_travel_policy", "create_expense_review_draft", "get_preference", "set_preference", "delete_preference"}),
+    "pretrip": frozenset({"get_trip_request", "get_approval_status", "get_traveler_profile", "list_my_trips", "search_travel_policy", "validate_trip_requirements", "create_travel_checklist_draft", "request_approval", "get_preference", "set_preference", "delete_preference"}),
+    "intrip": frozenset({"get_itinerary", "get_traveler_profile", "list_my_trips", "search_travel_policy", "create_escalation_or_support_draft", "request_approval", "get_preference", "set_preference", "delete_preference"}),
+    "posttrip": frozenset({"get_expense_report", "get_traveler_profile", "list_my_trips", "list_my_expenses", "calculate_expense_summary", "search_travel_policy", "create_expense_review_draft", "get_preference", "set_preference", "delete_preference"}),
     "admin": frozenset({"admin_list_trips", "admin_get_audit_history"}),
 }
 

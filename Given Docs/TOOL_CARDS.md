@@ -25,6 +25,8 @@ Error codes gợi ý: `invalid_argument, not_found, not_allowed, unauthorized_sc
 | delete_preference | Memory | scoped write | key | chỉ khi application xác nhận user yêu cầu xóa |
 | admin_list_trips | Travel Request | Admin read-only | none | list mọi mock trip; không sửa |
 | admin_get_audit_history | Audit log | Admin read-only | trip_id? / report_id? | lọc lịch sử; không sửa/xóa |
+| list_my_trips | Travel Request | scoped read | destination?, date? | Employee: chỉ của mình; Reviewer: tất cả; Admin/Approver: từ chối |
+| list_my_expenses | Expense | scoped read | trip_id? | Employee: chỉ của mình; Reviewer: tất cả; Admin/Approver: từ chối |
 
 ## Mỗi tool card cần có
 Mục đích · Args schema · Preconditions · Validation · Result schema · Error codes · Side effects (none/draft only) · Workflows được phép dùng.

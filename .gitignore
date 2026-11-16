@@ -13,5 +13,6 @@ dist/
 build/
 data/drafts/*.json
 data/memory/**/*.json
+data/logs/*.csv
 .DS_Store
 Thumbs.db

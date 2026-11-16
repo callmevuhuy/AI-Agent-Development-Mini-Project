@@ -13,6 +13,7 @@
         "purpose": {"type": "string"},
         "travel_status": {"type": "string"}
       },
+      "required": ["trip_id"],
       "additionalProperties": false
     },
     "evidence_refs": {

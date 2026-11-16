@@ -5,5 +5,7 @@ from . import (
     get_approval_status,
     delete_preference,
     get_preference,
+    list_my_expenses,
+    list_my_trips,
     set_preference,
 )

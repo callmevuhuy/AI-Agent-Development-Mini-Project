@@ -7,7 +7,9 @@ from pathlib import Path
 from typing import Any
 
 
-DRAFT_DIR = Path(__file__).resolve().parents[3] / "data" / "drafts"
+from travel_agent.config import DRAFT_DIR as _DEFAULT_DRAFT_DIR
+
+DRAFT_DIR = _DEFAULT_DRAFT_DIR
 _SOURCE_IDS = re.compile(r"^(?:TRIP-\d{4}-\d{3}|EXP-\d{4}-\d{3})$")
 
 

@@ -5,6 +5,7 @@ from .store import (
     ScopeError,
     clear_session,
     delete_preference,
+    delete_session_value,
     get_preference,
     get_preferences,
     get_session_state,
@@ -13,6 +14,6 @@ from .store import (
 )
 
 __all__ = [
-    "ConsentError", "ScopeError", "clear_session", "delete_preference", "get_preference", "get_preferences",
-    "get_session_state", "set_preference", "set_session_value",
+    "ConsentError", "ScopeError", "clear_session", "delete_preference", "delete_session_value",
+    "get_preference", "get_preferences", "get_session_state", "set_preference", "set_session_value",
 ]

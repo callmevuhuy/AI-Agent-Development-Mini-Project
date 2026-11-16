@@ -30,6 +30,7 @@ def run_posttrip(state: RunState, report_id: str | None) -> dict[str, Any]:
             "failed_validation" if error["code"] == "not_found" else "partial"
         )
         return _stop(state, outcome, "Could not load the expense report.", error_code=error["code"])
+    report = report_result["data"]
 
     state.set_phase("posttrip_calculation")
     summary_result = run_tool(state, "calculate_expense_summary", {"report_id": report_id})
@@ -69,7 +70,10 @@ def run_posttrip(state: RunState, report_id: str | None) -> dict[str, Any]:
         "decision": "review_required",
     }
 
-    has_policy_issue = bool(summary["threshold_conflicts"] or summary["threshold_flags"])
+    has_policy_issue = bool(
+        summary["threshold_conflicts"]
+        or any(flag.get("status") != "within_all_active_versions" for flag in summary["threshold_flags"])
+    )
     has_missing_data = bool(summary["missing_fields"] or summary["missing_receipts"] or summary["invalid_items"])
     if policy_result["data"]["no_result"] or not evidence:
         outcome, message = "needs_human", "No usable expense policy evidence was retrieved."
@@ -87,5 +91,5 @@ def run_posttrip(state: RunState, report_id: str | None) -> dict[str, Any]:
     if not draft_result["ok"]:
         error = draft_result["error"]
         draft_outcome = "failed_budget" if error["code"] == "budget_exceeded" else "partial"
-        return _stop(state, draft_outcome, "The expense preview is ready, but the review draft was not saved.", error_code=error["code"], review_preview=review_preview)
-    return _stop(state, outcome, message, review_preview=review_preview, draft=draft_result["data"])
+        return _stop(state, draft_outcome, "The expense preview is ready, but the review draft was not saved.", error_code=error["code"], report=report, review_preview=review_preview)
+    return _stop(state, outcome, message, report=report, review_preview=review_preview, draft=draft_result["data"])

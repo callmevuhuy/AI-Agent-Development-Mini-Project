@@ -41,7 +41,15 @@ Scoped session/preference storage and preference view/set/delete tools are imple
 
 ### 6. Automated tests, evaluation, baseline, root cause, regression, and demo — complete for the deterministic prototype
 
-There are 43 passing pytest cases and 25/25 deterministic evaluation cases. Baseline/after metrics, root-cause notes, regression report, and safe workflow traces are stored under `eval/`. Run `python -m pytest -q` and `python eval/run_eval.py --label after` to recheck. The baseline is the first recorded benchmark after implementation; there is no historical pre-change metric run.
+There are 53 passing pytest cases and 31/31 deterministic evaluation cases. Baseline/after metrics, root-cause notes, regression report, and safe workflow traces are stored under `eval/`. Run `python -m pytest -q` and `python eval/run_eval.py --label after` to recheck.
+
+### Deliverable Upgrade (2026-11-16): 4-Flow English NLU, Memory Integration, Strict Staff Handoff, UTF-8 CSV Logger & Web Demo
+
+- English NLU router (`src/travel_agent/nlu.py`) with NFKC normalization, canonical/malformed ID detection, preference commands, and clause splitting for mixed workflow + policy queries.
+- Enhanced offline BM25 (`src/travel_agent/rag/retriever.py`) with light English stemming, curated domain synonym expansion, and expanded injection exclusion.
+- 4-flow conversational orchestrator (`src/travel_agent/conversation.py`): `SELF_SERVE`, `CLARIFY`, `HANDOFF_STAFF`, `REJECT_SAFETY` with strict deterministic Staff Handoff templates (no improvised explanations) and `handoff_queue.csv` tickets.
+- Integrated short-term session memory (`active_trip_id`, `active_report_id`, `pending_slot`, TTL) and long-term preference formatting (`preferred_output_format`).
+- UTF-8 BOM CSV conversation & handoff logger (`src/travel_agent/logging_utils.py`) plus zero-dependency Web Demo (`src/travel_agent/web_demo.py`, `demo/web_demo.py`) and interactive CLI `chat`.
 
 ### Admin and role-based RAG extensions — complete for the mock prototype
 
@@ -50,7 +58,7 @@ Admin can only read trip overview and audit events. RAG filters chunk ACLs befor
 ## Current implementation notes
 
 - Workflow entry points live under `src/travel_agent/workflows/` and are invoked with a `RunState` whose `user_context` is application-owned.
-- Every tool call, including retry, consumes a step. Default maximum is 8 steps per run and each tool can be retried at most twice for retryable errors.
+- Every tool call, including retry, consumes a step. Default maximum is 8 steps per run (`MAX_ALLOWED_STEPS = 12` for `pretrip` / `mixed` headroom), and each tool can be retried at most twice for retryable errors.
 - Drafts are inert sandbox artifacts. Stable identity is derived from workflow and source record ID. A retry/update must reuse the same artifact rather than create duplicates.
 - Workflow responses must rely on the draft tool result before claiming that an artifact was persisted.
 - Mock policy data intentionally contains a meal-policy version conflict and an injection test chunk. The conflict must not be silently resolved; test-only/injection content must not be treated as evidence.

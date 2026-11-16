@@ -3,6 +3,8 @@ from copy import deepcopy
 from typing import Any
 from uuid import uuid4
 
+from travel_agent.config import DEFAULT_MAX_STEPS, MAX_ALLOWED_STEPS
+
 
 TERMINAL_OUTCOMES = frozenset({
     "completed",
@@ -21,7 +23,7 @@ class RunState:
     workflow: str
     user_context: dict[str, Any] = field(repr=False)
     phase: str = "tool_execution"
-    max_steps: int = 8
+    max_steps: int = DEFAULT_MAX_STEPS
     run_id: str = field(default_factory=lambda: str(uuid4()))
     case_id: str | None = None
     step_count: int = 0
@@ -33,8 +35,8 @@ class RunState:
         if not isinstance(self.user_context, dict):
             raise ValueError("user_context must be supplied by the application")
         self.user_context = deepcopy(self.user_context)
-        if isinstance(self.max_steps, bool) or not isinstance(self.max_steps, int) or not 1 <= self.max_steps <= 8:
-            raise ValueError("max_steps must be between 1 and 8")
+        if isinstance(self.max_steps, bool) or not isinstance(self.max_steps, int) or not 1 <= self.max_steps <= MAX_ALLOWED_STEPS:
+            raise ValueError(f"max_steps must be between 1 and {MAX_ALLOWED_STEPS}")
         if not isinstance(self.workflow, str) or not isinstance(self.phase, str):
             raise ValueError("workflow and phase must be strings")
         started = {

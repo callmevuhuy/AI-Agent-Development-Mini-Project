@@ -45,7 +45,16 @@ def run_pretrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
     if requirements["missing_fields"]:
         return _stop(
             state, "needs_input", "The trip record is missing required information.",
-            trip=trip, missing_fields=requirements["missing_fields"],
+            trip=trip, validation=requirements, missing_fields=requirements["missing_fields"],
+        )
+    early_blocking = [
+        item for item in requirements["blocking"]
+        if item not in {"approval_pending", "unknown_destination_requirements"}
+    ]
+    if early_blocking:
+        return _stop(
+            state, "needs_human", "The trip has a blocking travel or approval status.",
+            trip=trip, validation=requirements,
         )
     if requirements["unknown_destination_requirements"]:
         return _stop(state, "needs_human", "No configured policy requirements exist for this destination.", trip=trip)
@@ -113,4 +122,4 @@ def run_pretrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
         error = draft_result["error"]
         draft_outcome = "failed_budget" if error["code"] == "budget_exceeded" else "partial"
         return _stop(state, draft_outcome, "The checklist preview is ready, but the draft was not saved.", error_code=error["code"], checklist=checklist, validation=validation)
-    return _stop(state, outcome, message, checklist=checklist, validation=validation, draft=draft_result["data"])
+    return _stop(state, outcome, message, trip=trip, checklist=checklist, validation=validation, draft=draft_result["data"])

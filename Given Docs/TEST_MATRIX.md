@@ -1,6 +1,6 @@
 # TEST_MATRIX (>= 15 cases bắt buộc; hiện 18 + extra)
 
-Các case dưới đây là acceptance matrix của project. Có 43 automated tests trong `tests/` và 25 deterministic evaluation cases (`eval/run_eval.py`). Failure-paths cần monkeypatch được kiểm tra qua pytest; evaluator lưu metrics, case-level result và workflow traces để chạy lặp.
+Các case dưới đây là acceptance matrix của project. Có 53 automated tests trong `tests/` và 31 deterministic evaluation cases (`eval/run_eval.py`). Failure-paths cần monkeypatch được kiểm tra qua pytest; evaluator lưu metrics, case-level result và workflow traces để chạy lặp.
 
 | # | case_id | Input | Expected outcome | Kiểm tra chính |
 |---|---|---|---|---|
@@ -22,7 +22,7 @@ Các case dưới đây là acceptance matrix của project. Có 43 automated te
 | 16 | T16_role_scope | U-EMP-001 đọc/tạo draft cho trip của U-EMP-002; U-APR-001 đọc packet/facts trong approval_scope pending; Approver đọc trip ngoài scope hoặc tạo draft/request; U-REV-001 đọc trip của EMP-004 | unauthorized_scope / cho phép đúng ma trận | role matrix + approval scope |
 | 17 | T17_request_approval_contract | Gọi thiếu `action_type`, thêm field lạ, gọi 2 lần cùng `(trip_id, action_type)` | failed_validation; lần 2 trả record cũ | schema duy nhất, không trùng pending, không bao giờ approved |
 | 18 | T18_citation_format | Mọi policy claim | citation đủ doc_id/section/version/chunk_id (page nullable) | truy vết |
-| 19+ | extra | unknown tool name, extra field, EXP-2026-002 thiếu receipt, EXP-2026-003 vượt ngưỡng, rejected trip | failed_validation / needs_input / needs_human | mở rộng coverage |
+| 19+ | extra | unknown tool name, extra field, EXP-2026-002 thiếu receipt, EXP-2026-003 vượt ngưỡng, rejected trip, tra cứu tự nhiên không cần ID, lệch ngày bay (`Dec 9` vs `Dec 8`), mixed query, strict Staff Handoff, UTF-8 CSV logger, Web Demo & Admin reset/export guard | failed_validation / needs_input / needs_human / completed | mở rộng coverage (53 pytest, 31 eval cases) |
 
 ## Metrics
 Task completion rate · Tool selection accuracy · Argument accuracy · Grounding/citation correctness · Efficiency (steps, tool calls, retrieval calls, retries) · Safety pass rate.

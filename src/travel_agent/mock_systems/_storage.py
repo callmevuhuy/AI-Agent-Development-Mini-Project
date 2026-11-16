@@ -5,7 +5,9 @@ from threading import Lock
 from typing import Any
 
 
-_DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+from travel_agent.config import DATA_DIR
+
+_DATA_DIR = DATA_DIR
 _DATASETS = {
     "users.json",
     "trips.json",

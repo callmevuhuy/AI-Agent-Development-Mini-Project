@@ -27,7 +27,7 @@ Draft lifecycle: `draft_created -> awaiting_approval -> approved -> publish_requ
 Policy search chạy BM25 offline và trả `results`, `no_result`, citations, `version_conflicts`, `resolved_versions` và danh sách chunk injection đã loại. Claim dạng policy chỉ được xuất nếu `check_claim` tìm thấy đủ terms trong cùng một câu trusted evidence, polarity trùng khớp; nếu không thì không phát biểu claim. Đây là lexical baseline, chưa phải semantic entailment.
 
 ## A — Pre-trip Planning and Compliance
-Allowlist: `get_trip_request, get_approval_status, search_travel_policy, validate_trip_requirements, create_travel_checklist_draft, get_traveler_profile, request_approval` (plus scoped preference tools)
+Allowlist: `get_trip_request, get_approval_status, get_traveler_profile, list_my_trips, search_travel_policy, validate_trip_requirements, create_travel_checklist_draft, request_approval` (plus scoped preference tools)
 ```
 1  validate trip_id (regex)            -> fail: failed_validation / thiếu: needs_input
 2  get_trip_request                    -> not found: failed_validation(unknown_id)
@@ -45,7 +45,7 @@ Allowlist: `get_trip_request, get_approval_status, search_travel_policy, validat
 Rules: chỉ claim policy khi có citation; không nói "đã duyệt" nếu source chưa `approved`.
 
 ## B — In-trip Disruption Support
-Allowlist: `get_itinerary, search_travel_policy, create_escalation_or_support_draft, request_approval` (plus scoped preference tools)
+Allowlist: `get_itinerary, get_traveler_profile, list_my_trips, search_travel_policy, create_escalation_or_support_draft, request_approval` (plus scoped preference tools)
 ```
 1  validate trip_id
 2  get_itinerary
@@ -57,7 +57,7 @@ Allowlist: `get_itinerary, search_travel_policy, create_escalation_or_support_dr
 Rules: không đổi vé, đặt khách sạn, chi tiền hay gửi request. Action-like/cancelled/missing guidance -> `needs_human`.
 
 ## C — Post-trip Expense Pre-check
-Allowlist: `get_expense_report, calculate_expense_summary, search_travel_policy, create_expense_review_draft`
+Allowlist: `get_expense_report, get_traveler_profile, list_my_trips, list_my_expenses, calculate_expense_summary, search_travel_policy, create_expense_review_draft` (plus scoped preference tools)
 ```
 1  validate report_id
 2  get_expense_report
@@ -79,3 +79,9 @@ Các workflow A/B/C lưu artifact vào `data/drafts/` bằng `draft_id` ổn đ�
 - `request_approval(trip_id, action_type, action_summary)` is Employee-only and trip-owner scoped. Repeated `(trip_id, action_type)` returns the existing request; it never approves, rejects, sends, or publishes.
 - Admin workflow exposes only `admin_list_trips` and `admin_get_audit_history`, both read-only. Audit history includes safe workflow outcomes, approval request creation, and external mock decision events with a structured reason.
 - Policy search filters each chunk by `allowed_roles` before ranking. Approver needs a pending `approval_scope`; `checklist_review` may search approval/travel/visa/insurance, `escalation` may search travel, and `publish_request` may search approval. Admin cannot search policy.
+
+## Conversational 4-Flow Routing (`nlu.py` + `conversation.py`)
+- `SELF_SERVE`: Direct greeting, grounded policy Q&A, preference management, Admin read-only views, or workflows A/B/C resolved by ID or natural destination/date (`list_my_trips`, `list_my_expenses`, flight-date check via `get_itinerary`).
+- `CLARIFY`: Multi-trip ambiguity, unmatched date/destination, or missing fields/receipts (`needs_input`) with structured checklist/review status breakdown.
+- `HANDOFF_STAFF`: Unresolvable policy gaps/conflicts, pending/rejected approval, cancelled flight, or forbidden/out-of-scope requests — uses fixed template `[HANDOFF TO STAFF | Ticket: HND-...]` with verified facts only and logs to `handoff_queue.csv`.
+- `REJECT_SAFETY`: Prompt injection, malformed IDs, or unauthorized role/record scope rejected prior to execution.

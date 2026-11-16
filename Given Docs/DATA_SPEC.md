@@ -12,7 +12,6 @@ Toàn bộ giả lập, không PII thật. ID: `TRIP-YYYY-NNN`, `EXP-YYYY-NNN`, 
 | U-REV-001 | Reviewer | null |
 | U-APR-001 | Approver | null |
 | U-ADM-001 | Admin | null |
-| U-ADM-001 | Admin | null |
 Dùng để test phân quyền và cross-user isolation.
 CLI `--user` nhận `user_id` trong bảng này; application tra role và `traveler_id` từ `users.json`. Không truyền `traveler_id` làm user đăng nhập.
 
