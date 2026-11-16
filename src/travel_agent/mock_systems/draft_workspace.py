@@ -13,6 +13,7 @@ DRAFT_DIR = _DEFAULT_DRAFT_DIR
 _SOURCE_IDS = re.compile(r"^(?:TRIP-\d{4}-\d{3}|EXP-\d{4}-\d{3})$")
 
 
+# Mock Draft Workspace (Mục 6, 11.1): Lưu trữ artifact bản nháp mang tính idempotent trong sandbox.
 def upsert_draft(workflow: str, source_id: str, content: dict[str, Any]) -> dict[str, Any]:
     if workflow not in {"pretrip", "intrip", "posttrip"} or not _SOURCE_IDS.fullmatch(source_id):
         raise ValueError("Invalid draft identity")
@@ -23,6 +24,8 @@ def upsert_draft(workflow: str, source_id: str, content: dict[str, Any]) -> dict
         "draft_id": draft_id,
         "workflow": workflow,
         "source_id": source_id,
+        "source_ids": [source_id],
+        "status": "draft_created",
         "draft_status": "draft_created",
         "delivery_status": "not_sent" if workflow == "intrip" else "not_published",
         "content": content,

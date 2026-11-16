@@ -9,6 +9,7 @@ from travel_agent.trace import record_tool_event
 MAX_TOOL_RETRIES = 2
 
 
+# Orchestrator (Mục 7.1, 9.1, 12): Thực thi tool có quản lý ngân sách bước gọi, giới hạn retry và ghi nhận safe trace.
 def run_tool(
     state: RunState,
     tool_name: str,

@@ -5,6 +5,7 @@ from travel_agent.mock_systems.user import get_user
 from travel_agent.tools._result import failure, success
 
 
+# Tool Self-Serve (Mục 4): Liệt kê danh sách chuyến đi thuộc phạm vi ủy quyền của người dùng.
 def run(arguments: dict[str, Any], *, user_context: dict[str, Any] | None = None) -> dict[str, Any]:
     if not isinstance(user_context, dict):
         return failure("unauthorized_scope", "Application role context is required.")

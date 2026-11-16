@@ -92,6 +92,7 @@ def _resolve_session_dir() -> Path:
     return SESSION_DIR
 
 
+# Memory Store (Mục 9.2): Truy xuất danh sách tùy chọn dài hạn của người dùng theo user ID.
 def get_preferences(user_context: dict[str, Any]) -> dict[str, str]:
     user_id, _ = _scope(user_context)
     values = _read(_resolve_pref_dir() / f"{user_id}.json")
@@ -108,6 +109,7 @@ def get_preference(user_context: dict[str, Any], key: str) -> str | None:
     return get_preferences(user_context).get(key)
 
 
+# Memory Store (Mục 9.2): Lưu tùy chọn người dùng lâu dài khi có sự đồng ý tường minh.
 def set_preference(user_context: dict[str, Any], key: str, value: str) -> dict[str, str]:
     user_id, _ = _scope(user_context, require_write_consent=True)
     if not isinstance(key, str) or key not in _PREFERENCE_VALUES or not isinstance(value, str) or value not in _PREFERENCE_VALUES[key]:
@@ -118,6 +120,7 @@ def set_preference(user_context: dict[str, Any], key: str, value: str) -> dict[s
     return {"key": key, "value": value}
 
 
+# Memory Store (Mục 9.2): Xóa tùy chọn đã lưu của người dùng trong môi trường prototype.
 def delete_preference(user_context: dict[str, Any], key: str) -> bool:
     user_id, _ = _scope(user_context, require_write_consent=True)
     if not isinstance(key, str) or key not in _PREFERENCE_VALUES:
@@ -137,6 +140,7 @@ def _session_path(user_id: str, session_id: str) -> Path:
     return _resolve_session_dir() / user_id / f"{session_id}.json"
 
 
+# Memory Store (Mục 9.2): Truy xuất trạng thái phiên hội thoại ngắn hạn (active_trip_id, pending_slot) theo TTL.
 def get_session_state(user_context: dict[str, Any]) -> dict[str, str]:
     user_id, session_id = _scope(user_context)
     path = _session_path(user_id, session_id)
@@ -151,6 +155,7 @@ def get_session_state(user_context: dict[str, Any]) -> dict[str, str]:
     }
 
 
+# Memory Store (Mục 9.2): Lưu giá trị ngữ cảnh gần vào phiên hội thoại ngắn hạn kèm hạn dùng TTL.
 def set_session_value(
     user_context: dict[str, Any],
     key: str,
@@ -173,7 +178,7 @@ def set_session_value(
         raise ValueError("invalid_argument")
     values = dict(get_session_state(user_context))
     values[key] = value
-    values["_expires_at"] = int(time.time()) + max(1, ttl_seconds)
+    values["_expires_at"] = time.time() + max(1, ttl_seconds)
     _write(_session_path(user_id, session_id), values)
 
 

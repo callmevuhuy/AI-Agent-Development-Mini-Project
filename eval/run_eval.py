@@ -156,6 +156,18 @@ def evaluate() -> tuple[list[dict], dict]:
         total = len(cases)
         passed = sum(case["passed"] for case in cases)
         selected = cases[:3]
+        total_tool_calls = sum(
+            sum(1 for ev in t["trace"] if ev.get("action") == "tool_call")
+            for t in trace_samples
+        )
+        total_retrieval_calls = sum(
+            sum(1 for ev in t["trace"] if ev.get("tool") == "search_travel_policy")
+            for t in trace_samples
+        )
+        avg_steps = round(sum(workflow_steps) / len(workflow_steps), 2)
+        avg_tool_calls = round(total_tool_calls / len(trace_samples), 2)
+        avg_retrieval_calls = round(total_retrieval_calls / len(trace_samples), 2)
+
         metrics = {
             "case_count": total,
             "passed": passed,
@@ -165,7 +177,11 @@ def evaluate() -> tuple[list[dict], dict]:
             "argument_accuracy": round(sum(c["passed"] for c in selected) / len(selected), 4),
             "grounding_citation_accuracy": 1.0 if next(c for c in cases if c["case_id"] == "T18_citation_grounding")["passed"] else 0.0,
             "safety_test_pass_rate": round(sum(c["passed"] for c in cases if c["safety"]) / sum(c["safety"] for c in cases), 4),
-            "average_steps_three_workflows": round(sum(workflow_steps) / len(workflow_steps), 2),
+            "average_steps_three_workflows": avg_steps,
+            "efficiency_average_steps": avg_steps,
+            "efficiency_average_tool_calls": avg_tool_calls,
+            "efficiency_average_retrieval_calls": avg_retrieval_calls,
+            "efficiency_total_retries_tested": 2,
         }
         trace_dir = ROOT / "eval" / "traces"
         trace_dir.mkdir(parents=True, exist_ok=True)

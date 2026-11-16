@@ -7,6 +7,7 @@ from travel_agent.mock_systems._storage import load_dataset
 from travel_agent.tools._result import failure, success
 
 
+# Tool Validation (Mục 8.1): Kiểm định các trường bắt buộc và đối chiếu bằng chứng chính sách.
 def run(arguments: dict[str, Any], *, user_context: dict[str, Any] | None = None) -> dict[str, Any]:
     if not isinstance(user_context, dict):
         return failure("unauthorized_scope", "Application role context is required.")

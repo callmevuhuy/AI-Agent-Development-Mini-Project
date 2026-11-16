@@ -17,6 +17,7 @@ from travel_agent.mock_systems.approval import record_audit_event
 from travel_agent.mock_systems.user import get_user
 from travel_agent.nlu import RouteDecision, normalize_text, route_message_intent
 from travel_agent.orchestrator import run_tool
+from travel_agent.rag.query_rewrite import rewrite_query
 from travel_agent.state import RunState
 from travel_agent.workflows.a_pretrip import run_pretrip
 from travel_agent.workflows.b_intrip import run_intrip
@@ -729,6 +730,7 @@ def _handoff_reason_for_workflow(outcome: str, result: dict[str, Any]) -> str:
     return result.get("message", "Human Travel Operations staff review is required.")
 
 
+# Conversational Orchestrator (Mục 5, 8, 9, 11): Điều phối phiên thoại đa lượt qua 4 luồng nghiệp vụ chuẩn.
 def handle_turn(
     message: str,
     user_id: str,
@@ -848,9 +850,11 @@ def handle_turn(
     elif route == "SELF_SERVE" and intent == "policy_qa":
         workflow_name = "policy_qa"
         state = RunState("pretrip", user_context, phase="policy_qa")
+        pol_cat = decision.policy_category or "travel"
+        rewritten_q, _ = rewrite_query(decision.policy_query or message, pol_cat, state=state)
         res = run_tool(state, "search_travel_policy", {
-            "query": decision.policy_query or message,
-            "category": decision.policy_category or "travel",
+            "query": rewritten_q,
+            "category": pol_cat,
             "max_results": 5,
         })
         data = res.get("data", {}) if res.get("ok") else {}
@@ -918,9 +922,11 @@ def handle_turn(
                 temp_state = RunState(wf, user_context, max_steps=state.max_steps, run_id=state.run_id)
                 temp_state.set_phase("mixed_policy_qa")
                 temp_state.step_count = state.step_count
+                mixed_cat = decision.policy_category or "travel"
+                rewritten_mixed_q, _ = rewrite_query(decision.policy_query, mixed_cat, state=temp_state)
                 p_res = run_tool(temp_state, "search_travel_policy", {
-                    "query": decision.policy_query,
-                    "category": decision.policy_category or "travel",
+                    "query": rewritten_mixed_q,
+                    "category": mixed_cat,
                     "max_results": 5,
                 })
                 state.step_count = temp_state.step_count

@@ -2,6 +2,7 @@
 from travel_agent.nlu import route_message_intent
 
 
+# Planner (Mục 7.1): Phân tích thông điệp người dùng để đề xuất workflow và ID đối tượng tương ứng.
 def plan(message: str) -> dict[str, str] | None:
     """Return {workflow, record_id} for supported single-turn workflow requests, else None."""
     decision = route_message_intent(message)

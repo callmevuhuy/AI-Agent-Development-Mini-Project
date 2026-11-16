@@ -9,11 +9,13 @@ _REPORT_ID = re.compile(r"^EXP-\d{4}-\d{3}$")
 _CATEGORY_QUERY = {"meals": "meal", "ground_transport": "transport", "lodging": "lodging"}
 
 
+# Workflow State (Mục 9.1): Chốt trạng thái dừng và ghi nhận terminal outcome.
 def _stop(state: RunState, outcome: str, message: str, **details: Any) -> dict[str, Any]:
     state.finish(outcome)
     return {"outcome": outcome, "message": message, **details}
 
 
+# Workflow C (Mục 8.3): Rà soát báo cáo chi phí sau chuyến đi trước khi nộp theo chuỗi 6 bước chuẩn.
 def run_posttrip(state: RunState, report_id: str | None) -> dict[str, Any]:
     """Create a deterministic, read-only expense pre-check for a mock report."""
     state.set_phase("posttrip_validation")

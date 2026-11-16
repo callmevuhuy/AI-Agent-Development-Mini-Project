@@ -228,3 +228,22 @@ def test_rag_citations_grounding_and_conflict_reach_workflows(monkeypatch, tmp_p
     assert posttrip["outcome"] == "needs_human"
     versions = posttrip["review_preview"]["version_conflicts"][0]["versions"]
     assert {row["chunk_id"] for row in versions} == {"POL-EXP-MEAL-V1", "POL-EXP-MEAL-V2"}
+
+
+def test_query_rewrite_traces_and_limits_to_one():
+    from travel_agent.rag.query_rewrite import rewrite_query
+    state = RunState("pretrip", context())
+    rewritten, did_rewrite = rewrite_query("What is the per diem?", "expense", state=state)
+    assert did_rewrite is True
+    assert "daily meal allowance cap" in rewritten
+    # Check trace
+    rewrite_events = [e for e in state.trace if e["action"] == "query_rewrite"]
+    assert len(rewrite_events) == 1
+    assert rewrite_events[0]["transition"] == "query_rewritten"
+
+    # Second rewrite on same branch must be ignored
+    second, did_second = rewrite_query("What is the hotel limit?", "expense", state=state, already_rewritten=True)
+    assert did_second is False
+    assert second == "What is the hotel limit?"
+    assert len([e for e in state.trace if e["action"] == "query_rewrite"]) == 1
+

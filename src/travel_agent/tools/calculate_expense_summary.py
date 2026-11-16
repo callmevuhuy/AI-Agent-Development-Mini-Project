@@ -7,6 +7,7 @@ from travel_agent.mock_systems.policy_kb import get_policy_chunks
 from travel_agent.tools._result import failure, success
 
 
+# Tool Expense Summary (Mục 6, 8.3): Tính toán tổng chi phí và kiểm tra ngưỡng định mức xác định.
 def run(arguments: dict[str, Any], *, user_context: dict[str, Any] | None = None) -> dict[str, Any]:
     if not isinstance(user_context, dict):
         return failure("unauthorized_scope", "Application role context is required.")

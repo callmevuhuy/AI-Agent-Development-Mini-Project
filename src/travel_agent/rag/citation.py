@@ -1,6 +1,7 @@
 from typing import Any
 
 
+# RAG Citation (Mục 10.2): Tạo chuỗi trích dẫn quy chuẩn giữ nguyên nguồn, mục, phiên bản và chunk ID.
 def citation_for_chunk(chunk: dict[str, Any]) -> str:
     citation = f"[{chunk['doc_id']} §{chunk['section']} v{chunk['version']} · {chunk['chunk_id']}"
     if chunk.get("page") is not None:

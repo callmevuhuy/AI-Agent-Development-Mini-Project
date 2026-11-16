@@ -91,6 +91,7 @@ def _bm25_score(
     return score
 
 
+# RAG Retriever (Mục 10.1, 12): Tìm kiếm BM25 offline kết hợp stemming, từ đồng nghĩa và loại trừ tiêm nhiễm.
 def retrieve(query: str, chunks: list[dict[str, Any]], max_results: int) -> dict[str, Any]:
     """Run offline BM25 retrieval with light stemming, synonym expansion, and injection exclusion."""
     query_terms = list(dict.fromkeys(_tokens(query, expand_synonyms=True)))

@@ -9,11 +9,13 @@ from travel_agent.state import RunState
 _TRIP_ID = re.compile(r"^TRIP-\d{4}-\d{3}$")
 
 
+# Workflow State (Mục 9.1): Chốt trạng thái dừng và ghi nhận terminal outcome.
 def _stop(state: RunState, outcome: str, message: str, **details: Any) -> dict[str, Any]:
     state.finish(outcome)
     return {"outcome": outcome, "message": message, **details}
 
 
+# Workflow B (Mục 8.2): Hỗ trợ xử lý sự cố gián đoạn hành trình trong chuyến đi theo chuỗi 6 bước chuẩn.
 def run_intrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
     """Prepare safe disruption guidance and an idempotent support draft."""
     state.set_phase("intrip_validation")

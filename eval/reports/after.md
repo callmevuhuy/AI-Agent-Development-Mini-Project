@@ -15,6 +15,10 @@ Deterministic mock evaluation; no live services or real employee data.
 | grounding_citation_accuracy | 1.0 |
 | safety_test_pass_rate | 1.0 |
 | average_steps_three_workflows | 5.0 |
+| efficiency_average_steps | 5.0 |
+| efficiency_average_tool_calls | 5.0 |
+| efficiency_average_retrieval_calls | 2.0 |
+| efficiency_total_retries_tested | 2 |
 
 ## Cases
 

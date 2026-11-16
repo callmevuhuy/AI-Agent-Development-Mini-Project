@@ -118,6 +118,7 @@ class RouteDecision:
     reason: str = ""
 
 
+# NLU Input Normalization (Mục 12): Chuẩn hóa chuỗi văn bản đầu vào theo chuẩn NFKC và loại bỏ ký tự lạ.
 def normalize_text(text: str) -> str:
     """Normalize English text (NFKC, lowercase, collapsed whitespace) for deterministic matching."""
     if not isinstance(text, str):
@@ -126,6 +127,7 @@ def normalize_text(text: str) -> str:
     return " ".join(norm.split())
 
 
+# NLU Input Validation (Mục 12): Trích xuất và kiểm định mã TRIP-ID hoặc EXP-ID từ thông điệp người dùng.
 def extract_record_ids(text: str) -> dict[str, str | None]:
     """Extract canonical TRIP/EXP IDs and detect malformed ID attempts."""
     trip_match = _TRIP_CANONICAL.search(text)
@@ -253,6 +255,7 @@ def _infer_workflow_intent(norm: str, trip_id: str | None, report_id: str | None
     return None
 
 
+# NLU Routing (Mục 5, 10.1, 12): Phân loại yêu cầu người dùng vào một trong 4 luồng xử lý nghiêm ngặt.
 def route_message_intent(message: str) -> RouteDecision:
     """Classify an English user message into one of four deterministic routes."""
     if not isinstance(message, str) or not message.strip():

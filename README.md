@@ -114,6 +114,24 @@ python eval/run_eval.py --label after
 python -m compileall -q src tests eval demo
 ```
 
+## Deliverables Index (Section 14 Compliance)
+
+Full mapping with concrete evidence against the assignment specification is documented in [REQUIREMENTS_COMPLIANCE_EVIDENCE.md](REQUIREMENTS_COMPLIANCE_EVIDENCE.md).
+
+| Deliverable | Specification Reference | Repository Location |
+|---|---|---|
+| **1. Source Code & CLI** | Section 14.1 | [src/travel_agent/](src/travel_agent/) |
+| **2. Setup & Execution Guide** | Section 14.2 | [README.md](README.md) |
+| **3. Mock Datasets & Policy Corpus** | Section 14.3 | [data/](data/) (`trips`, `travelers`, `itineraries`, `expenses`, `policy_chunks`) |
+| **4. Agent Contract & Tool Cards** | Section 14.4 | [Given Docs/AGENTS.md](Given%20Docs/AGENTS.md), [Given Docs/TOOL_CARDS.md](Given%20Docs/TOOL_CARDS.md), [src/travel_agent/schemas/](src/travel_agent/schemas/) |
+| **5. Architecture & Vertical Workflows** | Section 14.5 | [Given Docs/ARCHITECTURE.md](Given%20Docs/ARCHITECTURE.md) |
+| **6. Memory Policy & Data Boundaries** | Section 14.6 | [Given Docs/MEMORY_AND_SAFETY.md](Given%20Docs/MEMORY_AND_SAFETY.md) |
+| **7. Test Matrix & Root-Cause Taxonomy** | Section 14.7 | [Given Docs/TEST_MATRIX.md](Given%20Docs/TEST_MATRIX.md), [eval/reports/root_cause.md](eval/reports/root_cause.md) |
+| **8. Baseline / After / Regression Report** | Section 14.8 | [eval/reports/baseline.md](eval/reports/baseline.md), [eval/reports/after.md](eval/reports/after.md), [eval/reports/regression.md](eval/reports/regression.md) |
+| **9. Demo & Walkthrough** | Section 14.9 | [demo/DEMO_SCENARIOS.md](demo/DEMO_SCENARIOS.md), [demo/run_demo.ps1](demo/run_demo.ps1), [demo/web_demo.py](demo/web_demo.py) |
+| **10. Limitations & Safety Boundaries** | Section 14.10 | [README.md](README.md#known-limitations) & [Given Docs/AGENTS.md](Given%20Docs/AGENTS.md) |
+| **Bonus: Section 17 Self-Check Answers** | Section 17 | [REQUIREMENTS_COMPLIANCE_EVIDENCE.md#mục-17-giải-đáp-chi-tiết-6-câu-hỏi-tự-kiểm-tra-trước-khi-nộp-bài](REQUIREMENTS_COMPLIANCE_EVIDENCE.md#mục-17-giải-đáp-chi-tiết-6-câu-hỏi-tự-kiểm-tra-trước-khi-nộp-bài) |
+
 ## Known Limitations
 
 * Intent routing (`nlu.py`) and BM25 retrieval (`rag/retriever.py`) are deterministic, offline, and English-only; no external LLM or semantic NLI model is used.

@@ -30,6 +30,7 @@ def _terms(text: str) -> set[str]:
     return terms
 
 
+# RAG Grounding (Mục 10.2): Kiểm tra tính có căn cứ của mệnh đề so với câu chứa bằng chứng tin cậy.
 def check_claim(claim: str, chunks: list[dict[str, Any]]) -> dict[str, Any]:
     """Require every non-stopword claim term to occur in trusted retrieved text."""
     claim_terms = _terms(claim)

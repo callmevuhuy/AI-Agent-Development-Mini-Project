@@ -35,6 +35,7 @@ def _scope_error() -> dict[str, Any]:
     return failure("unauthorized_scope", "The requested resource is outside this user's scope.")
 
 
+# Dispatcher Authorization (Mục 12): Kiểm tra ủy quyền truy xuất dữ liệu theo đúng vai trò và phạm vi người dùng.
 def _authorize(
     tool_name: str, arguments: dict[str, Any], user_context: dict[str, Any]
 ) -> dict[str, Any] | None:
@@ -116,6 +117,7 @@ def _authorize(
     return None
 
 
+# Function Calling (Mục 7.3): Kiểm định cấu trúc kết quả trả về tuân thủ đúng hợp đồng {ok, data, meta} hoặc error.
 def _valid_result(result: Any) -> bool:
     if not isinstance(result, dict) or not isinstance(result.get("ok"), bool):
         return False
@@ -136,6 +138,7 @@ def _valid_result(result: Any) -> bool:
     )
 
 
+# Dispatcher (Mục 7.1, 12): Trung tâm điều phối thực thi tool qua kiểm tra registry, allowlist, schema và ngân sách.
 def dispatch(
     tool_name: str,
     arguments: dict[str, Any],

@@ -4,6 +4,7 @@ from travel_agent.mock_systems.approval import create_approval_request
 from travel_agent.tools._result import failure, success
 
 
+# Tool Approval Simulation (Mục 6, 11.2): Tạo yêu cầu phê duyệt mô phỏng ở trạng thái pending mang tính idempotent.
 def run(arguments: dict[str, Any], *, user_context: dict[str, Any], run_id: str) -> dict[str, Any]:
     record, reused = create_approval_request(
         arguments["trip_id"], arguments["action_type"], arguments["action_summary"],

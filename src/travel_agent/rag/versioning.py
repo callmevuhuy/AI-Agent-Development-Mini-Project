@@ -12,6 +12,7 @@ def _version_key(version: str) -> tuple[int, ...]:
     return tuple(map(int, parts)) if parts else ()
 
 
+# RAG Versioning (Mục 10.2): Phát hiện xung đột phiên bản và xác định phiên bản hiệu lực của chính sách.
 def version_review(chunks: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for chunk in chunks:

@@ -4,6 +4,7 @@ from travel_agent.mock_systems._storage import load_dataset
 from travel_agent.tools._result import success
 
 
+# Tool Admin (Mục 4, 12): Đọc lịch sử sự kiện kiểm toán bất biến dành cho vai trò Admin.
 def run(arguments: dict[str, Any]) -> dict[str, Any]:
     events = load_dataset("audit_events.json")
     trip_id = arguments.get("trip_id")

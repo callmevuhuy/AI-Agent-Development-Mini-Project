@@ -54,6 +54,7 @@ class RunState:
             started["case_id"] = self.case_id
         self.trace.append(started)
 
+    # Workflow State (Mục 9.1): Chốt trạng thái dừng và ghi nhận terminal outcome.
     def finish(self, outcome: str) -> None:
         if outcome not in TERMINAL_OUTCOMES:
             raise ValueError("Invalid terminal outcome")
@@ -79,7 +80,33 @@ class RunState:
         for event in self.trace:
             event["outcome"] = outcome
 
+    # Workflow State (Mục 9.1): Cập nhật giai đoạn hiện tại của quy trình thực thi.
     def set_phase(self, phase: str) -> None:
         if not isinstance(phase, str) or not phase:
             raise ValueError("phase must be a non-empty string")
         self.phase = phase
+
+    # Workflow Trace (Mục 9.1, 13.3): Ghi nhận sự kiện thực thi an toàn vào danh sách trace.
+    def record_event(
+        self,
+        action: str,
+        *,
+        tool: str | None = None,
+        safe_args: dict[str, Any] | None = None,
+        observation_status: str = "ok",
+        transition: str = "intermediate",
+    ) -> None:
+        event = {
+            "run_id": self.run_id,
+            "phase": self.phase,
+            "action": action,
+            "tool": tool,
+            "safe_args": safe_args or {},
+            "observation_status": observation_status,
+            "transition": transition,
+            "budget": {"step": self.step_count, "max": self.max_steps},
+            "outcome": self.outcome,
+        }
+        if self.case_id is not None:
+            event["case_id"] = self.case_id
+        self.trace.append(event)
