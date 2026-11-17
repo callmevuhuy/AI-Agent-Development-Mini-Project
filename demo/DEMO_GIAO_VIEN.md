@@ -28,6 +28,8 @@ Nếu chỉ có 8–10 phút, ưu tiên bước 1–3, 6, 8–10 và 12. Các bi
 
 ## Các ca bổ sung nếu còn thời gian
 
+Thử thêm với Reviewer: `Xem chi tiết chuyến TRIP-2026-006; Yêu cầu phê duyệt checklist TRIP-2026-006`. Chat phải hiện hai phản hồi: phần đọc hợp lệ, phần tạo pending bị từ chối; không bỏ qua phần đầu. Rê chuột hoặc dùng Tab chọn thẻ Trip dưới phần đọc để xem thông tin. Phần bị từ chối không có thẻ dữ kiện ngoài quyền. Khi hỏi checklist/chi phí/sự cố, không tự chèn toàn bộ hồ sơ Trip vào câu trả lời.
+
 | Tình huống | Cách thử | Kết quả |
 |---|---|---|
 | Handoff chủ động | EMP002: `Tôi cần gặp nhân viên hỗ trợ trực tiếp` | Có HND và bản ghi hàng đợi mô phỏng, không gửi cho người thật |

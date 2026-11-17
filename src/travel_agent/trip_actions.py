@@ -29,3 +29,30 @@ def action_decision(action: str, trip_id: str) -> RouteDecision:
                          draft_requested=action == 'checklist',
                          approval_action='escalation' if action == 'support' else None,
                          admin_action='audit' if action == 'audit' else None)
+
+
+def trip_reference(user_id, trip_id, action_type=None):
+    """Đọc lại nguồn và quyền hiện tại khi mở thẻ tham chiếu, không dùng cache chat."""
+    from travel_agent.mock_systems.user import get_user
+    from travel_agent.dispatcher import dispatch
+    user = get_user(user_id)
+    if not user:
+        raise ValueError('Không tìm thấy tài khoản demo.')
+    action_decision('details', trip_id)
+    context = {'user_id':user_id, 'role':user['role'], 'session_id':'trip-reference'}
+    itinerary = user['role'] == 'Approver' and action_type == 'escalation'
+    if user['role'] == 'Approver':
+        context['approval_scope'] = {'trip_id':trip_id, 'action_type':action_type}
+    res = dispatch('get_itinerary' if itinerary else 'get_trip_request', {'trip_id':trip_id},
+                   'intrip' if itinerary else 'pretrip', context)
+    if not res['ok']:
+        raise PermissionError(res['error']['message'])
+    data = res['data']
+    if itinerary:
+        flight = data.get('flight',{})
+        fields = {k:flight.get(k) for k in ('flight_id','origin','destination','departure','arrival','status')}
+        fields['disruption'] = data.get('disruption')
+    else:
+        fields = {k:data.get(k) for k in ('destination','start_date','end_date','purpose','travel_status')}
+    return {'trip_id':trip_id, 'kind':'itinerary' if itinerary else 'trip', 'fields':fields,
+            'source':res['meta']['source']}

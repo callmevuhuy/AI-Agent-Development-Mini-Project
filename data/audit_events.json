@@ -2390,5 +2390,61 @@
     "reason": "Conversational turn completed with recorded outcome.",
     "timestamp": "2026-11-17T17:38:44.520382+00:00",
     "run_id": "49046573-8e1f-48e4-b21d-434f56e345e7"
+  },
+  {
+    "event_id": "EVT-80d51695-5e59-4d76-bb83-089304833cbb",
+    "event_type": "workflow_run",
+    "actor_id": "U-EMP-002",
+    "role": "Employee",
+    "action": "intrip",
+    "trip_id": "TRIP-2026-002",
+    "report_id": null,
+    "outcome": "completed",
+    "reason_code": "workflow_terminal_outcome",
+    "reason": "Conversational turn completed with recorded outcome.",
+    "timestamp": "2026-11-17T17:55:26.946198+00:00",
+    "run_id": "80d51695-5e59-4d76-bb83-089304833cbb"
+  },
+  {
+    "event_id": "EVT-c8eeae74-301c-4866-a57c-efdc3c052be8",
+    "event_type": "workflow_run",
+    "actor_id": "U-EMP-002",
+    "role": "Employee",
+    "action": "pretrip",
+    "trip_id": "TRIP-2026-006",
+    "report_id": null,
+    "outcome": "completed",
+    "reason_code": "workflow_terminal_outcome",
+    "reason": "Conversational turn completed with recorded outcome.",
+    "timestamp": "2026-11-17T17:55:46.249557+00:00",
+    "run_id": "c8eeae74-301c-4866-a57c-efdc3c052be8"
+  },
+  {
+    "event_id": "EVT-501380f5-0146-4662-bf08-00386184b4c9",
+    "event_type": "workflow_run",
+    "actor_id": "U-EMP-002",
+    "role": "Employee",
+    "action": "intrip",
+    "trip_id": "TRIP-2026-002",
+    "report_id": null,
+    "outcome": "completed",
+    "reason_code": "workflow_terminal_outcome",
+    "reason": "Conversational turn completed with recorded outcome.",
+    "timestamp": "2026-11-17T17:56:36.186900+00:00",
+    "run_id": "501380f5-0146-4662-bf08-00386184b4c9"
+  },
+  {
+    "event_id": "EVT-d67000c5-6c93-486d-8c39-deb4af6e47b8",
+    "event_type": "workflow_run",
+    "actor_id": "U-EMP-002",
+    "role": "Employee",
+    "action": "posttrip",
+    "trip_id": null,
+    "report_id": "EXP-2026-001",
+    "outcome": "completed",
+    "reason_code": "workflow_terminal_outcome",
+    "reason": "Conversational turn completed with recorded outcome.",
+    "timestamp": "2026-11-17T17:56:51.822428+00:00",
+    "run_id": "d67000c5-6c93-486d-8c39-deb4af6e47b8"
   }
 ]

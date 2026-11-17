@@ -2,6 +2,10 @@
 
 Kịch bản trình bày ba workflow và quyền các role: [Demo cho giáo viên](demo/DEMO_GIAO_VIEN.md).
 
+Chat hỗ trợ tối đa bốn yêu cầu trong một tin nhắn, tách bằng dấu chấm phẩy, xuống dòng hoặc liên từ trước một yêu cầu tường minh. Giao diện hiện từng kết quả riêng, giữ lỗi/quyền/outcome của từng phần; đây là các thao tác tuần tự, không phải giao dịch nguyên tử. Injection được kiểm tra trên cả tin nhắn trước khi thực hiện. Mỗi phần giữ budget/retry của lượt riêng.
+
+Phản hồi workflow/handoff không tự đính kèm toàn bộ chi tiết Trip kể cả khi chọn định dạng chi tiết. Thẻ Trip dưới phản hồi mở bằng rê chuột hoặc focus bàn phím, gọi `/api/trip/reference` để kiểm tra lại quyền và đọc nguồn hiện tại. Scope hỗ trợ của Approver chỉ hiện dữ kiện hành trình, không mở hồ sơ chuyến. Citation policy vẫn độc lập với tham chiếu Trip. Muốn đọc đầy đủ, hỏi tường minh “Xem chi tiết chuyến TRIP-…”.
+
 Nguyên mẫu hỗ trợ chuẩn bị chuyến công tác, xử lý sự cố trong chuyến đi và rà soát chi phí sau chuyến đi. Hệ thống chạy ngoại tuyến với dữ liệu giả lập; định tuyến, phân quyền, tính toán và đánh giá được thực hiện bằng quy tắc xác định.
 
 ## Cài đặt môi trường

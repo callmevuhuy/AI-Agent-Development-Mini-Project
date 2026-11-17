@@ -1,5 +1,13 @@
 # Nhật ký thay đổi
 
+## 2026-11-18 — Phản hồi gọn, nhiều yêu cầu và tham chiếu Trip
+
+- Bỏ chèn chi tiết hồ sơ Trip theo preference detailed vào workflow/handoff/clarification; giữ thông tin phục vụ đúng câu hỏi và đọc đầy đủ khi được yêu cầu tường minh.
+- Tách tối đa bốn yêu cầu theo dấu phân cách rõ ràng, xử lý tuần tự với quyền/kết quả/trace riêng; không tự mở rộng scope, kiểm tra injection trên cả tin nhắn trước thực thi.
+- Thêm thẻ Trip mở bằng hover/focus; endpoint đọc lại nguồn qua dispatcher và kiểm tra quyền hiện tại, chỉ trả trường phù hợp scope. Thẻ Trip không thay thế citation policy.
+- Thêm test nhiều yêu cầu, lỗi từng phần, giới hạn batch, dữ kiện gọn, tham chiếu theo role/scope, thu hồi quyền, HTTP và JavaScript rendering.
+- Kiểm chứng: 180 test pytest và 62/62 ca evaluator đạt.
+
 ## 2026-11-18 — Bổ sung kiểm thử requirement và kịch bản bảo vệ
 
 - Thêm 19 ca kiểm tra sâu về dispatcher, output, lỗi lưu draft, idempotency ba workflow, thiếu policy, nguồn mới và dataset.

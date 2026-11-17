@@ -301,12 +301,9 @@ def _format_handoff_response(
         "",
         f"Lý do chuyển tiếp (Reason): {reason}" if is_vi else f"Reason: {reason}",
     ]
-    detail_lines = _trip_details_block(result or {}, is_vi=is_vi) if output_format == "detailed" else []
-    if detail_lines:
-        lines.append("")
-        lines.extend(detail_lines)
-    if facts_summary and output_format == "detailed":
-        lines.extend(["", f"Tóm tắt dữ kiện xác thực (Verified Summary): {facts_summary}" if is_vi else f"Verified Summary: {facts_summary}"])
+    summary = (result or {}).get('review_preview', {}).get('summary', {})
+    if summary:
+        lines.append(f"Báo cáo {summary.get('report_id')}: {summary.get('total')} {summary.get('currency', '')}")
     ev_lines = _format_evidence_lines(result or {}, max_items=3 if output_format == "concise" else None)
     if ev_lines:
         lines.extend(["", "Căn cứ chính sách tham chiếu (Policy Sources Referenced):" if is_vi else "Policy Sources Referenced:"])
@@ -345,12 +342,11 @@ def _format_workflow_success(
 
     lines = [f"[{workflow.upper()} | COMPLETED]", msg]
 
-    detail_lines = _trip_details_block(result, is_vi=is_vi) if output_format == "detailed" else []
-    if detail_lines:
-        lines.append("")
-        lines.extend(detail_lines)
 
     if workflow == "intrip" and isinstance(result.get("support_draft"), dict):
+        disruption = result['support_draft'].get('disruption') or {}
+        if disruption.get('delay_minutes'):
+            lines.append(f"Chuyến bay bị trễ {disruption['delay_minutes']} phút." if is_vi else f"Flight delayed by {disruption['delay_minutes']} minutes.")
         follow_up = result["support_draft"].get("recommended_follow_up")
         if follow_up:
             lines.extend(["", "Hướng dẫn có căn cứ (Grounded Guidance):" if is_vi else "Grounded Guidance:", f"  - {follow_up}"])
@@ -387,10 +383,6 @@ def _format_clarify_workflow(workflow: str, result: dict[str, Any], output_forma
     msg = "Cần bổ sung thêm thông tin." if is_vi else "More information is required."
     lines = [f"[{workflow.upper()} | NEEDS INPUT]", result.get("message", msg)]
 
-    detail_lines = _trip_details_block(result, is_vi=is_vi) if output_format == "detailed" else []
-    if detail_lines:
-        lines.append("")
-        lines.extend(detail_lines)
 
     if workflow == "pretrip":
         validation = result.get("validation") or {}
@@ -901,7 +893,7 @@ def _handoff_reason_for_workflow(outcome: str, result: dict[str, Any], is_vi: bo
 
 
 # Conversational Orchestrator (Mục 5, 8, 9, 11): Điều phối phiên thoại đa lượt qua 4 luồng nghiệp vụ chuẩn.
-def handle_turn(
+def _single_turn(
     message: str,
     user_id: str,
     *,
@@ -1270,7 +1262,7 @@ def handle_turn(
                     else "Request denied: the requested record is outside your authorized scope."
                 )
             elif outcome == "awaiting_approval":
-                bot_response = "Chuyến đi đang chờ phê duyệt.\n" + "\n".join(_trip_details_block(result_payload, is_vi=is_vi))
+                bot_response = "Chuyến đi đang chờ phê duyệt. Checklist hiện chỉ là bản xem trước; cần người phụ trách phê duyệt để tiếp tục."
             elif outcome == "completed" and not policy_handoff_reason:
                 bot_response = _format_workflow_success(wf, result_payload, citations, output_format, policy_note=policy_note, is_vi=is_vi)
             elif outcome == "needs_input":
@@ -1396,4 +1388,54 @@ def handle_turn(
         "run_id": state.run_id,
         "step_count": state.step_count,
         "trace": state.trace,
+        "trip_references": _trip_references(state, result_payload, approval_scope) if route != "REJECT_SAFETY" else [],
     }
+
+
+def _trip_references(state, result, scope):
+    ids = set()
+    for event in state.trace:
+        trip = event.get('safe_args', {}).get('trip_id')
+        if event.get('observation_status') == 'ok' and isinstance(trip, str) and re.fullmatch(r'TRIP-\d{4}-\d{3}', trip):
+            ids.add(trip)
+    def collect(value):
+        if isinstance(value, dict):
+            trip = value.get('trip_id')
+            if isinstance(trip, str) and re.fullmatch(r'TRIP-\d{4}-\d{3}', trip):
+                ids.add(trip)
+            for item in value.values(): collect(item)
+        elif isinstance(value, list):
+            for item in value: collect(item)
+    collect(result)
+    return [{'trip_id': trip, 'action_type': scope.get('action_type') if scope else None} for trip in sorted(ids)]
+
+
+def handle_turn(message, user_id, *, session_id='demo-session', approval_scope=None,
+                trip_action=None, action_trip_id=None):
+    """Xử lý tối đa bốn yêu cầu độc lập, mỗi yêu cầu giữ quyền và kết quả riêng."""
+    # Kiểm tra injection trên cả tin nhắn trước khi chạy bất kỳ nhánh nào.
+    unsafe = route_message_intent(message).intent == 'safety_adversarial'
+    parts = re.split(r'[;\n]+|[.!?]\s+(?=[A-ZÀ-Ỹ])|\s+(?:và|đồng thời|sau đó|and|then)\s+(?=(?:xem|kiểm tra|yêu cầu|chuẩn bị|phê duyệt|tạo|check|show|prepare|request|review)\b)', message, flags=re.I)
+    parts = [p.strip() for p in parts if p.strip()]
+    if trip_action is not None or unsafe or len(parts) < 2:
+        return _single_turn(message, user_id, session_id=session_id, approval_scope=approval_scope,
+                            trip_action=trip_action, action_trip_id=action_trip_id)
+    if len(parts) > 4:
+        return {'route':'CLARIFY','intent':'multiple_requests','outcome':'needs_input',
+                'bot_response':'Hãy gửi tối đa 4 yêu cầu trong một tin nhắn, tách bằng dấu chấm phẩy.',
+                'responses':[], 'trip_references':[], 'trace':[], 'step_count':0,
+                'citations':[], 'handoff_required':False, 'error':None, 'result':{}}
+    responses = [_single_turn(p, user_id, session_id=session_id, approval_scope=approval_scope) for p in parts]
+    outcomes = {r['outcome'] for r in responses}
+    all_denied = all(r['route'] == 'REJECT_SAFETY' for r in responses)
+    refs = {(r['trip_id'],r.get('action_type')):r for response in responses for r in response.get('trip_references',[])}
+    return {'route':'REJECT_SAFETY' if all_denied else 'SELF_SERVE', 'intent':'multiple_requests',
+            'outcome': next(iter(outcomes)) if len(outcomes)==1 else 'partial',
+            'bot_response':'\n\n'.join(f"Yêu cầu {i+1}: {part}\n{r['bot_response']}" for i,(part,r) in enumerate(zip(parts,responses))),
+            'responses':[{'request':p,**r} for p,r in zip(parts,responses)],
+            'trip_references':list(refs.values()), 'result':{},
+            'citations':list(dict.fromkeys(c for r in responses for c in r['citations'])),
+            'handoff_required':any(r['handoff_required'] for r in responses),
+            'handoff_id':None, 'error':responses[0]['error'] if all_denied else None,
+            'step_count':sum(r['step_count'] for r in responses),
+            'trace':[e for r in responses for e in r['trace']]}

@@ -111,9 +111,9 @@ def test_natural_prompts_without_ids_resolve_and_format_human_trip_details(monke
     delay = chat_turn("My flight to Tokyo on Dec 8 is delayed, what should I do?", "U-EMP-002", session_id="nat-1")
     assert delay["route"] == "SELF_SERVE" and delay["outcome"] == "completed"
     assert delay["record_id"] == "TRIP-2026-002"
-    assert "Traveler: Jamie Tran (EMP-002 · Engineering)" in delay["bot_response"]
-    assert "Hanoi, Viet Nam (HAN)" in delay["bot_response"]
-    assert "Postponed / Delayed (+240 mins)" in delay["bot_response"]
+    assert "Traveler:" not in delay["bot_response"]
+    assert "240 minutes" in delay["bot_response"]
+    assert delay['trip_references'][0]['trip_id'] == 'TRIP-2026-002'
     assert "Mock Global Travel Policy" in delay["bot_response"]
 
     # Post-trip natural prompt resolves EXP-2026-001 via Tokyo trip
@@ -153,14 +153,15 @@ def test_role_distinct_capabilities_for_reviewer_approver_and_admin():
     assert rev_list["route"] == "SELF_SERVE" and "TRIP-2026-003" in rev_list["bot_response"] and "Taylor Pham" in rev_list["bot_response"]
     rev_exp = chat_turn("Review expense report EXP-2026-003", "U-REV-001", session_id="rev-s1")
     assert rev_exp["route"] == "HANDOFF_STAFF" and "EXP-2026-003" in rev_exp["bot_response"]
-    assert "Traveler: Alex Nguyen (EMP-001 · Sales)" in rev_exp["bot_response"]
+    assert "Traveler:" not in rev_exp["bot_response"]
     rev_sydney = chat_turn("Check TRIP-2026-006", "U-REV-001", session_id="rev-s1")
-    assert "Traveler: Jamie Tran (EMP-002 · Engineering)" in rev_sydney["bot_response"]
+    assert rev_sydney['trip_references'][0]['trip_id'] == 'TRIP-2026-006'
+    assert "Traveler:" not in rev_sydney['bot_response']
 
     # Issue 2: Incomplete Berlin checklist & incomplete expense report give structured missing breakdown
     rev_incomplete = chat_turn("Prepare checklist for TRIP-2026-003", "U-REV-001", session_id="rev-s1")
     assert rev_incomplete["route"] == "CLARIFY" and rev_incomplete["outcome"] == "needs_input"
-    assert "Traveler: Taylor Pham (EMP-003 · Sales)" in rev_incomplete["bot_response"]
+    assert rev_incomplete['trip_references'][0]['trip_id'] == 'TRIP-2026-003'
     assert "Current Checklist Status:" in rev_incomplete["bot_response"]
     assert "Missing required field: `purpose`" in rev_incomplete["bot_response"]
 
@@ -220,7 +221,7 @@ def test_long_term_preference_formats_response_and_strict_handoff_logs_utf8_csv(
     assert get_preferences({"user_id": "U-EMP-002", "role": "Employee", "session_id": "pref-s1"})["preferred_output_format"] == "detailed"
 
     detailed = chat_turn("I am traveling to Sydney on Dec 31 for a workshop, what do I need to prepare?", "U-EMP-002", session_id="pref-s1")
-    assert "Sandbox Artifact:" in detailed["bot_response"] and "Sydney" in detailed["bot_response"]
+    assert "Sandbox Artifact:" in detailed["bot_response"] and detailed['trip_references'][0]['trip_id'] == 'TRIP-2026-006'
 
     mixed = chat_turn("Check my Sydney trip and what is the lodging cap?", "U-EMP-002", session_id="pref-s1")
     assert mixed["route"] == "SELF_SERVE" and mixed["outcome"] == "completed"

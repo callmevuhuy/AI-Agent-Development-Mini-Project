@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlparse
 from travel_agent.conversation import handle_turn
 from travel_agent.workspace import draft_detail
 from travel_agent.trip_actions import available_actions, LABELS as TRIP_ACTION_LABELS, action_decision
+from travel_agent.trip_actions import trip_reference
 from travel_agent.errors import ERROR_MESSAGES
 from travel_agent.logging_utils import _resolve_log_dir, clear_all_logs, read_chat_history, read_handoff_queue
 from travel_agent.memory import get_preferences, get_session_state
@@ -376,6 +377,9 @@ _HTML = """<!doctype html>
   }
   .btn-sm:hover { opacity: 0.9; }
   .btn-sm:disabled { opacity: 0.4; cursor: not-allowed; }
+  .trip-ref { position:relative; margin:6px 8px 4px 0; border:1px solid var(--accent-purple); border-radius:8px; padding:5px 9px; background:var(--bg-card); color:var(--text-primary); cursor:help; }
+  .trip-ref-info { display:none; position:absolute; z-index:40; bottom:100%; left:0; width:300px; max-width:75vw; padding:12px; white-space:pre-wrap; text-align:left; background:var(--bg-card); color:var(--text-primary); border:1px solid var(--accent-purple); border-radius:8px; box-shadow:0 4px 20px #0006; }
+  .trip-ref:hover .trip-ref-info, .trip-ref:focus-within .trip-ref-info { display:block; }
   .btn-danger { background: var(--red); color: #fff; }
   .btn-amber { background: var(--amber); color: #0f172a; }
 
@@ -1673,6 +1677,10 @@ function toggleTraceDetails(btn) {
 }
 
 function appendBotMsg(data) {
+  if (data.responses && data.responses.length) {
+    data.responses.forEach((r, i) => appendBotMsg({...r, bot_response:`Yêu cầu ${i+1}: ${r.request}\\n${r.bot_response}`}));
+    return;
+  }
   const stream = document.getElementById('chat-stream');
   const row = document.createElement('div');
   row.className = 'msg-row bot';
@@ -1719,6 +1727,35 @@ function appendBotMsg(data) {
   `;
 
   stream.appendChild(row);
+  const refs = document.createElement('div');
+  (data.trip_references || []).forEach(ref => {
+    const button = document.createElement('button');
+    button.className = 'trip-ref';
+    button.appendChild(document.createTextNode('↗ ' + ref.trip_id));
+    const info = document.createElement('span');
+    info.className = 'trip-ref-info';
+    info.setAttribute('role', 'tooltip');
+    info.textContent = 'Rê chuột hoặc chọn để xem thông tin chuyến.';
+    button.appendChild(info);
+    const load = async () => {
+      const generation = userGeneration;
+      info.textContent = 'Đang kiểm tra quyền và đọc thông tin chuyến…';
+      const query = new URLSearchParams({user_id:document.getElementById('user').value, trip_id:ref.trip_id});
+      if (ref.action_type) query.set('action_type', ref.action_type);
+      try {
+        const res = await fetch('/api/trip/reference?' + query);
+        const detail = await res.json();
+        if (generation !== userGeneration) return;
+        if (!res.ok) { info.textContent = detail.error || 'Không thể xem chuyến này.'; return; }
+        const labels = {destination:'Điểm đến', start_date:'Ngày đi', end_date:'Ngày về', purpose:'Mục đích', travel_status:'Trạng thái chuyến', flight_id:'Chuyến bay', origin:'Điểm đi', departure:'Khởi hành', arrival:'Đến nơi', status:'Trạng thái bay', disruption:'Sự cố'};
+        info.textContent = detail.trip_id + '\\n' + Object.entries(detail.fields).filter(([k,v]) => v != null).map(([k,v]) => (labels[k] || k) + ': ' + (typeof v === 'object' ? JSON.stringify(v) : v)).join('\\n') + '\\nNguồn: ' + detail.source;
+      } catch { info.textContent = 'Không tải được thông tin chuyến. Hãy thử lại.'; }
+    };
+    button.addEventListener('mouseenter', load);
+    button.addEventListener('focus', load);
+    refs.appendChild(button);
+  });
+  row.querySelector('.msg-bubble').appendChild(refs);
   stream.scrollTop = stream.scrollHeight;
 }
 
@@ -2258,6 +2295,18 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
 
         def do_GET(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
+            if parsed.path == '/api/trip/reference':
+                qs = parse_qs(parsed.query)
+                try:
+                    data = trip_reference(qs.get('user_id',[''])[0], qs.get('trip_id',[''])[0], qs.get('action_type',[None])[0])
+                    self._send_json(HTTPStatus.OK, data)
+                except PermissionError as exc:
+                    self._send_error(HTTPStatus.FORBIDDEN, 'unauthorized_scope', str(exc))
+                except (ValueError, TypeError):
+                    self._send_error(HTTPStatus.BAD_REQUEST, 'invalid_argument')
+                except OSError:
+                    self._send_error(HTTPStatus.SERVICE_UNAVAILABLE, 'unavailable')
+                return
             if parsed.path == "/":
                 body = _HTML.encode("utf-8")
                 self.send_response(HTTPStatus.OK)
