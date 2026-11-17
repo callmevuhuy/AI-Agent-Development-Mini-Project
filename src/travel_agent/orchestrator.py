@@ -20,12 +20,12 @@ def run_tool(
     if isinstance(max_retries, bool) or not isinstance(max_retries, int) or not 0 <= max_retries <= MAX_TOOL_RETRIES:
         raise ValueError("max_retries must be between 0 and 2")
     if state.outcome is not None:
-        return failure("not_allowed", "The run has already ended.")
+        return failure("not_allowed", "Quy trình đã kết thúc nên không thể gọi thêm công cụ. Hãy gửi yêu cầu mới.")
 
     retries = 0
     while True:
         if state.step_count >= state.max_steps:
-            result = failure("budget_exceeded", "The run has no remaining tool-call budget.")
+            result = failure("budget_exceeded", "Quy trình đã hết số bước gọi công cụ cho phép. Hãy thu gọn yêu cầu hoặc nhờ Travel Operations hỗ trợ.")
             record_tool_event(state, tool_name, arguments, result, "budget_exhausted", executed=False)
             state.finish("failed_budget")
             return result

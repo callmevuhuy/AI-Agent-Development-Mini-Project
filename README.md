@@ -22,6 +22,10 @@ python -m travel_agent.app web --port 8080
 
 The server listens on `http://127.0.0.1:8080`. It provides an interactive chat view, role selector, trace/memory inspector, Staff Handoff Queue view, Admin CSV download endpoints, and an Admin-only runtime data reset action.
 
+The demo uses Vietnamese descriptions with familiar English labels (Chat, Trips, Drafts, Handoff, Audit log, Memory & Trace). Error messages are always in Vietnamese, including when the request is in English. They explain the reason and next step while retaining stable diagnostic codes such as `unauthorized_scope`. Tool error details are preserved in chat responses, workflow results, and safe traces.
+
+Tab APIs require a selected mock `user_id`: Employees see only their trips and drafts; Reviewers can review all trips and drafts; Approvers use scoped read-only chat instead of browsing trips or drafts; audit logs and CSV exports require Admin. Handoff and chat history are limited to the current user, with Admin able to inspect all records. Switching the demo account clears the previous account's displayed data. This selector remains a local demo mechanism, not production authentication.
+
 ### Command-Line Interface
 
 ```powershell
@@ -99,7 +103,7 @@ src/travel_agent/
   memory/                 Short-term session store (with TTL) and long-term preference store
   rag/                    Offline BM25, stemming, synonym expansion, version review, and lexical grounding
   workflows/              Pre-trip (A), In-trip (B), and Post-trip (C) modules
-tests/                    Automated pytest suite (53 tests)
+tests/                    Automated pytest suite
 eval/                     Deterministic evaluation runner (31 cases) and reports
 ```
 

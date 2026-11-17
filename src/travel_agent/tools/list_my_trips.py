@@ -8,10 +8,10 @@ from travel_agent.tools._result import failure, success
 # Tool Self-Serve (Mục 4): Liệt kê danh sách chuyến đi thuộc phạm vi ủy quyền của người dùng.
 def run(arguments: dict[str, Any], *, user_context: dict[str, Any] | None = None) -> dict[str, Any]:
     if not isinstance(user_context, dict):
-        return failure("unauthorized_scope", "Application role context is required.")
+        return failure("unauthorized_scope", "Thiếu thông tin vai trò từ ứng dụng. Hãy chọn lại tài khoản demo.")
     user = get_user(user_context.get("user_id", ""))
     if not user or user.get("role") not in {"Employee", "Reviewer"}:
-        return failure("unauthorized_scope", "This user cannot list scoped trips.")
+        return failure("unauthorized_scope", "Vai trò này không được duyệt danh sách chuyến đi. Employee chỉ xem chuyến của mình; Reviewer và Admin xem theo chức năng được cấp.")
     traveler_id = user.get("traveler_id") if user["role"] == "Employee" else None
     trips = list_trip_requests(traveler_id=traveler_id)
 

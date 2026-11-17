@@ -10,10 +10,10 @@ from travel_agent.tools._result import failure, success
 # Tool Expense Summary (Mục 6, 8.3): Tính toán tổng chi phí và kiểm tra ngưỡng định mức xác định.
 def run(arguments: dict[str, Any], *, user_context: dict[str, Any] | None = None) -> dict[str, Any]:
     if not isinstance(user_context, dict):
-        return failure("unauthorized_scope", "Application role context is required.")
+        return failure("unauthorized_scope", "Thiếu thông tin vai trò từ ứng dụng. Hãy chọn lại tài khoản demo.")
     report = get_expense_report(arguments["report_id"])
     if report is None:
-        return failure("not_found", "The requested mock record was not found.")
+        return failure("not_found", "Không tìm thấy bản ghi trong dữ liệu demo. Hãy kiểm tra lại mã chuyến đi hoặc báo cáo.")
 
     currency = report["currency"]
     totals: dict[str, float] = defaultdict(float)
@@ -27,7 +27,7 @@ def run(arguments: dict[str, Any], *, user_context: dict[str, Any] | None = None
     visible_rule_categories = {chunk["rule"]["category"] for chunk in policy_chunks if isinstance(chunk.get("rule"), dict)}
     report_categories = {item.get("category") for item in report["line_items"] if isinstance(item.get("category"), str)}
     if (report_categories & categories_with_rules) - visible_rule_categories:
-        return failure("policy_access_required", "Applicable policy evidence is not available to this role.")
+        return failure("policy_access_required", "Vai trò hiện tại không có căn cứ chính sách cần thiết để rà soát chi phí. Hãy nhờ Reviewer hỗ trợ.")
 
     rules: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
 

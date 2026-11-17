@@ -11,5 +11,5 @@ def failure(code: str, message: str, retryable: bool = False) -> dict[str, Any]:
 
 def record_result(data: Any, source: str) -> dict[str, Any]:
     if data is None:
-        return failure("not_found", "The requested mock record was not found.")
+        return failure("not_found", "Không tìm thấy bản ghi trong dữ liệu demo. Hãy kiểm tra lại mã chuyến đi hoặc báo cáo.")
     return success(data, source)

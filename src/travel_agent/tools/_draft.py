@@ -10,5 +10,5 @@ def create(workflow: str, source_id: str, content: dict[str, Any]) -> dict[str, 
     """Verify the backing mock record exists before writing an idempotent draft."""
     exists = get_expense_report(source_id) if workflow == "posttrip" else get_trip_request(source_id)
     if exists is None:
-        return failure("not_found", "The requested mock record was not found.")
+        return failure("not_found", "Không tìm thấy bản ghi trong dữ liệu demo. Hãy kiểm tra lại mã chuyến đi hoặc báo cáo.")
     return success(upsert_draft(workflow, source_id, content), "mock_draft_workspace", read_only=False)

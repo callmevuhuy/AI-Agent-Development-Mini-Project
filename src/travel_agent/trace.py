@@ -76,7 +76,7 @@ def _result_summary(result: dict[str, Any]) -> dict[str, Any]:
             summary["excluded_untrusted_count"] = len(data.get("excluded_untrusted_chunk_ids", [])) if isinstance(data.get("excluded_untrusted_chunk_ids"), list) else 0
         return summary
     error = result["error"]
-    return {"ok": False, "error_code": error["code"], "retryable": error["retryable"]}
+    return {"ok": False, "error_code": error["code"], "error_message": error["message"], "retryable": error["retryable"]}
 
 
 def record_tool_event(
@@ -106,6 +106,7 @@ def record_tool_event(
     if state.case_id is not None:
         event["case_id"] = state.case_id
     if not result.get("ok"):
+        event["error"] = dict(result["error"])
         code = result.get("error", {}).get("code")
         if code in {"unauthorized_scope", "not_allowed"}:
             event["safety_event"] = "tool_or_scope_denied"

@@ -37,7 +37,7 @@ def _audit_run(user: dict[str, Any], state: RunState, record_id: str | None) -> 
 def _user_context(user_id: str, session_id: str, approval_scope: dict[str, str] | None = None) -> dict[str, Any]:
     user = get_user(user_id)
     if not user:
-        raise ValueError("Unknown mock user")
+        raise ValueError("Không tìm thấy tài khoản demo. Hãy chọn một người dùng trong danh sách.")
     context = {"user_id": user["user_id"], "role": user["role"], "session_id": session_id}
     if approval_scope:
         context["approval_scope"] = approval_scope
@@ -52,7 +52,7 @@ def run_workflow(
         raise ValueError("Unknown workflow")
     user = get_user(user_id)
     if not user:
-        raise ValueError("Unknown mock user")
+        raise ValueError("Không tìm thấy tài khoản demo. Hãy chọn một người dùng trong danh sách.")
     scope = None
     if user["role"] == "Approver":
         if not approval_action_type or not get_approval_request(record_id or "", approval_action_type):
@@ -83,7 +83,7 @@ def submit_approval_request(
 def admin_query(user_id: str, tool_name: str, arguments: dict[str, Any] | None = None) -> tuple[dict[str, Any], RunState]:
     user = get_user(user_id)
     if not user:
-        raise ValueError("Unknown mock user")
+        raise ValueError("Không tìm thấy tài khoản demo. Hãy chọn một người dùng trong danh sách.")
     state = RunState("admin", _user_context(user_id, "admin-session"))
     result = run_tool(state, tool_name, arguments or {})
     state.finish("completed" if result.get("ok") else "failed_validation")
@@ -96,7 +96,7 @@ def run_message(message: str, user_id: str, *, session_id: str = "demo-session")
     if not planned:
         user = get_user(user_id)
         if not user:
-            raise ValueError("Unknown mock user")
+            raise ValueError("Không tìm thấy tài khoản demo. Hãy chọn một người dùng trong danh sách.")
         state = RunState("pretrip", _user_context(user_id, session_id))
         state.set_phase("planning")
         state.finish("needs_input")

@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from travel_agent.conversation import handle_turn
+from travel_agent.errors import ERROR_MESSAGES
 from travel_agent.logging_utils import _resolve_log_dir, clear_all_logs, read_chat_history, read_handoff_queue
 from travel_agent.memory import get_preferences, get_session_state
 from travel_agent.memory import store as memory_store
@@ -22,7 +23,7 @@ _HTML = """<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Hệ thống Điều hành Công tác Doanh nghiệp — Travel Ops Agent</title>
+<title>Travel Ops Agent · Trợ lý công tác</title>
 <style>
   :root {
     /* Chế độ Nền Tối (Mặc định) */
@@ -816,7 +817,7 @@ _HTML = """<!doctype html>
   .badge-neutral { background: var(--blue-bg); color: var(--blue); border: 1px solid var(--blue-border); }
   .badge-route { background: rgba(139, 92, 246, 0.2); color: var(--accent-purple); border: 1px solid rgba(139, 92, 246, 0.4); }
 
-  /* Bố cục Bản nháp Sandbox (Draft Artifacts) */
+  /* Bố cục Drafts · Bản nháp (Draft Artifacts) */
   .artifacts-split {
     display: grid;
     grid-template-columns: 320px 1fr;
@@ -903,7 +904,7 @@ _HTML = """<!doctype html>
       <div class="brand-logo">🤖</div>
       <div>
         <div class="brand-name">KIRO CREW</div>
-        <div class="brand-sub">Trợ lý Tác vụ Công tác · v1.0</div>
+        <div class="brand-sub">Trợ lý công tác · Demo v1.0</div>
       </div>
     </div>
 
@@ -911,50 +912,50 @@ _HTML = """<!doctype html>
       <div class="nav-header">Không gian làm việc</div>
       <button class="nav-item active" onclick="switchView('chat', this)">
         <span class="nav-icon">💬</span>
-        <span>Phiên hội thoại</span>
+        <span>Chat với Agent</span>
       </button>
       <button class="nav-item" onclick="switchView('schedule', this)">
         <span class="nav-icon">📅</span>
-        <span>Lịch trình &amp; Chuyến đi</span>
+        <span>Trips · Chuyến công tác</span>
       </button>
       <button class="nav-item" onclick="switchView('artifacts', this)">
         <span class="nav-icon">📦</span>
-        <span>Bản nháp Sandbox</span>
+        <span>Drafts · Bản nháp</span>
       </button>
       <button class="nav-item" onclick="switchView('handoffs', this)">
         <span class="nav-icon">👥</span>
-        <span>Chuyển tiếp Nhân sự</span>
+        <span>Handoff · Yêu cầu hỗ trợ</span>
       </button>
 
-      <div class="nav-header" style="margin-top:8px">Quản trị &amp; Kiểm toán</div>
+      <div class="nav-header" style="margin-top:8px">Quản trị</div>
       <button class="nav-item" onclick="switchView('audit', this)">
         <span class="nav-icon">🛡️</span>
-        <span>Nhật ký Kiểm toán</span>
+        <span>Audit log · Nhật ký hoạt động</span>
       </button>
       <button class="nav-item" onclick="switchView('inspector', this)">
         <span class="nav-icon">🔍</span>
-        <span>Bộ nhớ &amp; Vết thực thi</span>
+        <span>Memory &amp; Trace</span>
       </button>
     </div>
   </div>
 
   <!-- Thẻ lựa chọn Vai trò Người dùng & Phạm vi Thẩm quyền -->
   <div class="sidebar-bottom">
-    <div class="user-box-label">Vai trò / Người dùng hoạt động</div>
+    <div class="user-box-label">Tài khoản demo / Role</div>
     <select id="user" onchange="onUserChange()">
-      <option value="U-EMP-002" data-role="Employee">Jamie Tran (U-EMP-002 · Nhân viên)</option>
-      <option value="U-EMP-001" data-role="Employee">Alex Nguyen (U-EMP-001 · Nhân viên)</option>
-      <option value="U-REV-001" data-role="Reviewer">Người Đánh giá Vận hành (U-REV-001)</option>
-      <option value="U-APR-001" data-role="Approver">Cấp Phê duyệt có Thẩm quyền (U-APR-001)</option>
-      <option value="U-ADM-001" data-role="Admin">Quản trị viên Hệ thống (U-ADM-001)</option>
+      <option value="U-EMP-002" data-role="Employee">Jamie Tran (U-EMP-002 · Employee)</option>
+      <option value="U-EMP-001" data-role="Employee">Alex Nguyen (U-EMP-001 · Employee)</option>
+      <option value="U-REV-001" data-role="Reviewer">Reviewer · Rà soát công tác (U-REV-001)</option>
+      <option value="U-APR-001" data-role="Approver">Approver · Xem yêu cầu phê duyệt (U-APR-001)</option>
+      <option value="U-ADM-001" data-role="Admin">Admin · Quản trị (U-ADM-001)</option>
     </select>
 
     <div id="approver-scope-box" class="hidden">
-      <div class="user-box-label" style="color:var(--accent-purple)">Phạm vi Phê duyệt (Ứng dụng sở hữu)</div>
+      <div class="user-box-label" style="color:var(--accent-purple)">Phạm vi phê duyệt · Approval scope</div>
       <select id="approval-scope">
         <option value="TRIP-2026-001|checklist_review">TRIP-2026-001 · checklist_review</option>
         <option value="TRIP-2026-002|escalation">TRIP-2026-002 · escalation</option>
-        <option value="">(Không gán phạm vi - Kiểm thử ranh giới)</option>
+        <option value="">(Chưa cấp phạm vi — thử tình huống bị từ chối)</option>
       </select>
     </div>
 
@@ -965,7 +966,7 @@ _HTML = """<!doctype html>
 
     <div class="status-pill">
       <span class="status-dot"></span>
-      <span>Trợ lý Tự hành Trực tuyến</span>
+      <span>Demo offline · Dữ liệu giả lập</span>
     </div>
   </div>
 </aside>
@@ -979,7 +980,7 @@ _HTML = """<!doctype html>
         <button class="arrow-btn" title="Quay lại" onclick="history.back()">‹</button>
         <button class="arrow-btn" title="Tiếp theo" onclick="history.forward()">›</button>
       </div>
-      <div class="header-title" id="page-title">Phiên hội thoại · Luồng Xử lý Trợ lý Tự hành</div>
+      <div class="header-title" id="page-title">Chat · Trợ lý công tác</div>
     </div>
 
     <div class="command-bar">
@@ -995,9 +996,9 @@ _HTML = """<!doctype html>
         <span>Nền Tối</span>
       </button>
 
-      <div class="meta-chip" id="token-chip" title="Token Ngữ cảnh Hoạt động">
+      <div class="meta-chip" id="token-chip" title="Demo chạy offline với dữ liệu giả lập">
         <span>●</span>
-        <span>1,240 / 4K token</span>
+        <span>Mock data · Offline</span>
       </div>
 
       <!-- Các chức năng Quản trị viên (Chỉ hiển thị với Admin) -->
@@ -1009,7 +1010,7 @@ _HTML = """<!doctype html>
     </div>
   </header>
 
-  <!-- Màn hình 1: Phiên hội thoại Chat (2 Cột) -->
+  <!-- Màn hình 1: Chat với Agent Chat (2 Cột) -->
   <section id="view-chat" class="view-container active">
     <!-- Cột chính: Luồng tin nhắn & Khung soạn thảo -->
     <div class="chat-main-pane">
@@ -1054,8 +1055,8 @@ _HTML = """<!doctype html>
   <section id="view-schedule" class="view-container">
     <div class="view-header">
       <div>
-        <h2>Lịch trình &amp; Các Chuyến công tác Doanh nghiệp</h2>
-        <p>Quản lý kế hoạch di chuyển, đặt chỗ chuyến bay, điểm đến và trạng thái phê duyệt trước/trong/sau chuyến đi.</p>
+        <h2>Trips · Danh sách chuyến công tác</h2>
+        <p>Xem lịch trình, điểm đến và trạng thái chuyến đi trong phạm vi được cấp.</p>
       </div>
       <button class="btn-sm" onclick="loadTrips()">Làm mới Chuyến đi</button>
     </div>
@@ -1063,7 +1064,7 @@ _HTML = """<!doctype html>
     <div class="table-card">
       <div class="table-toolbar">
         <input id="filter-trips" placeholder="Lọc chuyến đi theo người công tác, điểm đến hoặc trạng thái..." oninput="filterTripsTable()" />
-        <span style="font-size:12px;color:var(--text-muted)" id="trips-count-badge">Tổng cộng 6 chuyến</span>
+        <span style="font-size:12px;color:var(--text-muted)" id="trips-count-badge">Chưa tải dữ liệu</span>
       </div>
       <table>
         <thead>
@@ -1088,8 +1089,8 @@ _HTML = """<!doctype html>
   <section id="view-artifacts" class="view-container">
     <div class="view-header">
       <div>
-        <h2>Bản nháp &amp; Kết quả Xử lý trong Sandbox</h2>
-        <p>Kiểm tra các tài liệu nháp mang tính idempotent được tạo ra trong data/drafts/ (Checklist, Đơn leo thang trễ chuyến, Kiểm toán chi phí).</p>
+        <h2>Drafts · Bản nháp công tác</h2>
+        <p>Xem checklist, bản nháp hỗ trợ sự cố và rà soát chi phí. Mọi bản nháp chỉ được lưu trong demo, chưa gửi đi.</p>
       </div>
       <button class="btn-sm" onclick="loadDrafts()">Làm mới Bản nháp</button>
     </div>
@@ -1101,8 +1102,8 @@ _HTML = """<!doctype html>
       <div class="draft-detail-card" id="draft-detail-card">
         <div class="card-top-actions">
           <div class="tab-pills">
-            <button class="tab-pill-btn active" id="btn-tab-struct" onclick="toggleDraftTab('struct')">Chi tiết Cấu trúc</button>
-            <button class="tab-pill-btn" id="btn-tab-raw" onclick="toggleDraftTab('raw')">Mã JSON gốc</button>
+            <button class="tab-pill-btn active" id="btn-tab-struct" onclick="toggleDraftTab('struct')">Nội dung</button>
+            <button class="tab-pill-btn" id="btn-tab-raw" onclick="toggleDraftTab('raw')">JSON gốc</button>
           </div>
           <button class="btn-sm" onclick="copyCurrentDraft()">Sao chép JSON</button>
         </div>
@@ -1117,8 +1118,8 @@ _HTML = """<!doctype html>
   <section id="view-handoffs" class="view-container">
     <div class="view-header">
       <div>
-        <h2>Hàng đợi Chuyển tiếp &amp; Leo thang cho Nhân sự</h2>
-        <p>Các phiếu yêu cầu cần sự can thiệp của con người được ghi vào handoff_queue.csv (ngoài phạm vi, xung đột chính sách, duyệt cấp cao).</p>
+        <h2>Handoff · Yêu cầu cần hỗ trợ</h2>
+        <p>Các yêu cầu cần Travel Operations xem xét, như thiếu căn cứ chính sách, sự cố chuyến bay hoặc chờ phê duyệt. Phiếu chỉ được ghi trong demo.</p>
       </div>
       <button class="btn-sm" onclick="loadHandoffs()">Làm mới Hàng đợi</button>
     </div>
@@ -1126,7 +1127,7 @@ _HTML = """<!doctype html>
     <div class="table-card">
       <div class="table-toolbar">
         <input id="filter-handoffs" placeholder="Lọc phiếu theo mã ID, người dùng hoặc lý do..." oninput="filterHandoffsTable()" />
-        <span style="font-size:12px;color:var(--text-muted)" id="handoff-count-badge">Hàng đợi Hoạt động</span>
+        <span style="font-size:12px;color:var(--text-muted)" id="handoff-count-badge">Yêu cầu hỗ trợ</span>
       </div>
       <table>
         <thead>
@@ -1147,12 +1148,12 @@ _HTML = """<!doctype html>
     </div>
   </section>
 
-  <!-- Màn hình 5: Nhật ký Quản trị & Kiểm toán Bất biến -->
+  <!-- Màn hình 5: Audit log · Nhật ký hoạt động -->
   <section id="view-audit" class="view-container">
     <div class="view-header">
       <div>
-        <h2>Nhật ký Quản trị &amp; Kiểm toán Bất biến</h2>
-        <p>Dấu vết kiểm toán chống giả mạo ghi nhận mọi lượt chạy quy trình, quyết định phê duyệt và vi phạm bảo mật (data/audit_events.json).</p>
+        <h2>Nhật ký Quản trị Bất biến</h2>
+        <p>Dành cho Admin: xem các lượt xử lý, quyết định phê duyệt mô phỏng và yêu cầu bị từ chối.</p>
       </div>
       <button class="btn-sm" onclick="loadAuditEvents()">Làm mới Sự kiện</button>
     </div>
@@ -1160,7 +1161,7 @@ _HTML = """<!doctype html>
     <div class="table-card">
       <div class="table-toolbar">
         <input id="filter-audit" placeholder="Lọc theo mã sự kiện, người thực hiện hoặc hành động..." oninput="filterAuditTable()" />
-        <span style="font-size:12px;color:var(--text-muted)" id="audit-count-badge">Sự kiện Kiểm toán</span>
+        <span style="font-size:12px;color:var(--text-muted)" id="audit-count-badge">Sự kiện Rà soát</span>
       </div>
       <table>
         <thead>
@@ -1181,29 +1182,29 @@ _HTML = """<!doctype html>
     </div>
   </section>
 
-  <!-- Màn hình 6: Vết Thực thi, Bộ nhớ Ngắn hạn & Sở thích Dài hạn -->
+  <!-- Màn hình 6: Memory & Trace · Bộ nhớ và lịch sử xử lý -->
   <section id="view-inspector" class="view-container">
     <div class="view-header">
       <div>
-        <h2>Vết Thực thi, Bộ nhớ Ngắn hạn &amp; Sở thích Dài hạn</h2>
-        <p>Kiểm tra TTL ngữ cảnh đa lượt, thực thể trích xuất, sở thích cá nhân dài hạn và các bước thực thi quy trình nội bộ.</p>
+        <h2>Memory &amp; Trace · Bộ nhớ và lịch sử xử lý</h2>
+        <p>Xem ngữ cảnh phiên, tùy chọn đã lưu và chi tiết các bước xử lý của Agent.</p>
       </div>
       <button class="btn-sm" onclick="refreshInspector()">Làm mới Dữ liệu</button>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
       <div class="table-card" style="padding:16px">
-        <h4 style="font-size:13px;color:var(--text-primary);margin-bottom:8px">Trạng thái Phiên Ngắn hạn (Quản lý theo TTL)</h4>
+        <h4 style="font-size:13px;color:var(--text-primary);margin-bottom:8px">Session memory · Ngữ cảnh phiên</h4>
         <pre id="mem-session-box">Chưa có phiên hội thoại nào được nạp.</pre>
       </div>
       <div class="table-card" style="padding:16px">
-        <h4 style="font-size:13px;color:var(--text-primary);margin-bottom:8px">Sở thích Cá nhân Dài hạn (Lưu trữ Bền vững)</h4>
+        <h4 style="font-size:13px;color:var(--text-primary);margin-bottom:8px">Preferences · Tùy chọn đã lưu</h4>
         <pre id="mem-pref-box">Chưa có sở thích nào được lưu.</pre>
       </div>
     </div>
 
     <div class="table-card" style="padding:16px">
-      <h4 style="font-size:13px;color:var(--text-primary);margin-bottom:8px">Vết Thực thi &amp; Trích dẫn Chính sách của Lượt gần nhất</h4>
+      <h4 style="font-size:13px;color:var(--text-primary);margin-bottom:8px">Trace · Các bước xử lý và nguồn trích dẫn gần nhất</h4>
       <pre id="trace-raw-box">Chưa có lượt thực thi nào trong phiên này.</pre>
     </div>
   </section>
@@ -1229,7 +1230,7 @@ const ROLE_SUGGESTIONS = {
       tag: 'Kiểm tra chi phí',
       title: 'Kiểm tra chi phí Tokyo',
       prompt: 'Kiểm tra chi phí chuyến đi Tokyo của tôi (EXP-2026-001)',
-      desc: 'Kiểm toán báo cáo chi phí EXP-2026-001 và đối chiếu hạn mức chính sách.'
+      desc: 'Rà soát báo cáo chi phí EXP-2026-001 và đối chiếu hạn mức chính sách.'
     },
     {
       tag: 'Định mức khách sạn',
@@ -1238,28 +1239,28 @@ const ROLE_SUGGESTIONS = {
       desc: 'Truy vấn quy định hạn mức chi phí phòng nghỉ khách sạn mỗi đêm tại Sydney.'
     },
     {
-      tag: 'Leo thang duyệt',
-      title: 'Yêu cầu leo thang trễ chuyến',
+      tag: 'Yêu cầu phê duyệt',
+      title: 'Đề nghị hỗ trợ trễ chuyến',
       prompt: 'Hãy yêu cầu phê duyệt leo thang gián đoạn cho chuyến TRIP-2026-002',
-      desc: 'Khởi tạo đơn leo thang phê duyệt gián đoạn cho cấp quản lý.'
+      desc: 'Tạo yêu cầu phê duyệt hỗ trợ sự cố để người phụ trách xem xét.'
     },
     {
       tag: 'Bộ nhớ dài hạn',
-      title: 'Ghi nhớ sở thích chi tiết',
+      title: 'Lưu cách trả lời chi tiết',
       prompt: 'Hãy nhớ rằng tôi thích câu trả lời chi tiết',
       desc: 'Lưu vào bộ nhớ dài hạn sở thích nhận câu trả lời chi tiết từng bước.'
     },
     {
-      tag: 'Ngày mập mờ',
+      tag: 'Cần làm rõ ngày',
       title: 'Làm rõ ngày mai bị trễ',
       prompt: 'Chuyến bay ngày mai của tôi bị trễ, tôi phải làm gì?',
-      desc: 'Kiểm thử kịch bản ngày mập mờ yêu cầu Agent làm rõ thông tin.'
+      desc: 'Kiểm thử kịch bản ngày chưa rõ yêu cầu Agent làm rõ thông tin.'
     },
     {
-      tag: 'Chuyển tiếp nhân sự',
+      tag: 'Chuyển Travel Operations',
       title: 'Nhờ đặt phòng khách sạn',
       prompt: 'Bạn có thể đặt phòng khách sạn tại Tokyo giúp tôi không?',
-      desc: 'Kiểm thử chuyển tiếp nhân sự khi yêu cầu vượt thẩm quyền đặt phòng.'
+      desc: 'Kiểm thử chuyển Travel Operations khi yêu cầu vượt thẩm quyền đặt phòng.'
     },
     {
       tag: 'Bảo mật / Injection',
@@ -1282,7 +1283,7 @@ const ROLE_SUGGESTIONS = {
       desc: 'Hỏi checklist và quy định đi Singapore ngày 1/12.'
     },
     {
-      tag: 'Truy vấn mập mờ',
+      tag: 'Cần làm rõ chuyến đi',
       title: 'Kiểm tra chuyến sắp tới',
       prompt: 'Kiểm tra chuyến đi sắp tới của tôi',
       desc: 'Yêu cầu Agent hỏi lại để xác định đúng chuyến đi.'
@@ -1296,14 +1297,14 @@ const ROLE_SUGGESTIONS = {
     {
       tag: 'Xung đột chi phí',
       title: 'Báo cáo chi phí Singapore',
-      prompt: 'Kiểm tra chi phí chuyến đi Singapore EXP-2026-002',
-      desc: 'Kiểm toán chi phí bữa ăn có xung đột với hội thảo được đài thọ.'
+      prompt: 'Kiểm tra chi phí chuyến đi Singapore EXP-2026-003',
+      desc: 'Rà soát chi phí bữa ăn có xung đột với hội thảo được đài thọ.'
     },
     {
       tag: 'Handoff thanh toán',
       title: 'Yêu cầu quẹt thẻ thanh toán',
       prompt: 'Bạn có thể đặt khách sạn và quẹt thẻ thanh toán 4111222233334444 không?',
-      desc: 'Kiểm thử chuyển tiếp nhân sự và ẩn thông tin thẻ nhạy cảm.'
+      desc: 'Kiểm thử chuyển Travel Operations và ẩn thông tin thẻ nhạy cảm.'
     },
     {
       tag: 'Chính sách vé bay',
@@ -1320,8 +1321,8 @@ const ROLE_SUGGESTIONS = {
       desc: 'Quyền xem tổng hợp danh sách công tác của toàn bộ công ty.'
     },
     {
-      tag: 'Kiểm toán chéo',
-      title: 'Kiểm toán chi phí Berlin',
+      tag: 'Rà soát chéo',
+      title: 'Rà soát chi phí Berlin',
       prompt: 'Kiểm toán báo cáo chi phí EXP-2026-003 cho chuyến Berlin',
       desc: 'Đánh giá báo cáo chi phí của nhân viên khác (EMP-003).'
     },
@@ -1352,8 +1353,8 @@ const ROLE_SUGGESTIONS = {
       desc: 'Đọc và đối chiếu dữ liệu trong phạm vi phê duyệt checklist_review.'
     },
     {
-      tag: 'Duyệt leo thang',
-      title: 'Xem xét leo thang TRIP-2026-002',
+      tag: 'Xem yêu cầu hỗ trợ',
+      title: 'Xem sự cố TRIP-2026-002',
       prompt: 'Kiểm tra chuyến đi TRIP-2026-002',
       desc: 'Kiểm tra thông tin chuyến bay bị trễ trong phạm vi escalation.'
     },
@@ -1387,7 +1388,7 @@ const ROLE_SUGGESTIONS = {
       tag: 'Vết kiểm toán',
       title: 'Xem nhật ký kiểm toán TRIP-004',
       prompt: 'Xem nhật ký kiểm toán cho chuyến TRIP-2026-004',
-      desc: 'Truy xuất lịch sử sự kiện kiểm toán bất biến của chuyến đi.'
+      desc: 'Truy xuất lịch sử sự kiện audit log của chuyến đi.'
     },
     {
       tag: 'An ninh bảo mật',
@@ -1417,6 +1418,42 @@ let currentAuditEvents = [];
 let selectedDraft = null;
 let draftViewTab = 'struct';
 let isAgentThinking = false;
+let userGeneration = 0;
+
+const UI_LABELS = {
+  SELF_SERVE: 'Agent xử lý', CLARIFY: 'Cần bổ sung thông tin',
+  HANDOFF_STAFF: 'Cần nhân viên hỗ trợ', REJECT_SAFETY: 'Yêu cầu bị từ chối',
+  completed: 'Hoàn tất', needs_input: 'Cần bổ sung thông tin', needs_human: 'Cần xem xét',
+  awaiting_approval: 'Chờ phê duyệt', partial: 'Chưa hoàn tất',
+  failed_validation: 'Yêu cầu không hợp lệ', failed_delivery: 'Không lưu được kết quả',
+  failed_budget: 'Hết số bước xử lý', draft_created: 'Đã lưu bản nháp',
+  not_sent: 'Chưa gửi', not_published: 'Chưa phát hành',
+  pretrip: 'Pre-trip · Trước chuyến đi', intrip: 'In-trip · Trong chuyến đi', posttrip: 'Post-trip · Sau chuyến đi',
+  approved: 'Đã phê duyệt', denied: 'Bị từ chối', pending: 'Đang chờ',
+  confirmed: 'Đã xác nhận', submitted: 'Đã gửi yêu cầu', draft: 'Bản nháp', cancelled: 'Đã hủy'
+};
+function uiLabel(value) { return UI_LABELS[value] || value || 'Chưa có'; }
+
+// Every panel displays failures locally and discards replies from old identities.
+async function fetchPanel(path, onSuccess, onError) {
+  const generation = userGeneration;
+  const params = new URLSearchParams({
+    user_id: document.getElementById('user').value,
+    session_id: document.getElementById('session').value.trim() || ('web-' + document.getElementById('user').value)
+  });
+  try {
+    const res = await fetch(`${path}?${params}`);
+    const data = await res.json();
+    if (generation !== userGeneration) return;
+    if (!res.ok) {
+      onError(`${data.error || 'Không tải được dữ liệu. Hãy thử lại.'} (Mã lỗi: ${data.code || 'unavailable'})`);
+      return;
+    }
+    onSuccess(data);
+  } catch {
+    if (generation === userGeneration) onError('Không kết nối được web demo hoặc phản hồi không hợp lệ. Hãy kiểm tra server rồi thử lại.');
+  }
+}
 
 function currentRole() {
   const sel = document.getElementById('user');
@@ -1457,12 +1494,12 @@ function switchView(viewName, btnEl) {
   if (btnEl) btnEl.classList.add('active');
 
   const titles = {
-    'chat': 'Phiên hội thoại · Luồng Xử lý Trợ lý Tự hành',
-    'schedule': 'Lịch trình & Tổng quan Chuyến công tác Doanh nghiệp',
-    'artifacts': 'Bản nháp Sandbox · Sản phẩm Idempotent',
-    'handoffs': 'Hàng đợi Chuyển tiếp & Leo thang Nhân sự',
-    'audit': 'Nhật ký Quản trị & Kiểm toán Bất biến',
-    'inspector': 'Vết Thực thi, Bộ nhớ Ngắn hạn & Sở thích Dài hạn'
+    'chat': 'Chat · Trợ lý công tác',
+    'schedule': 'Trips · Danh sách chuyến công tác',
+    'artifacts': 'Drafts · Bản nháp · Sản phẩm Idempotent',
+    'handoffs': 'Handoff · Yêu cầu cần hỗ trợ',
+    'audit': 'Audit log · Nhật ký hoạt động',
+    'inspector': 'Memory & Trace · Bộ nhớ và lịch sử xử lý'
   };
   document.getElementById('page-title').textContent = titles[viewName] || 'Hệ thống Điều hành Công tác';
 
@@ -1504,10 +1541,17 @@ function renderPromptSuggestions() {
 }
 
 function onUserChange() {
+  userGeneration += 1;
   const uid = document.getElementById('user').value;
   const role = currentRole();
   document.getElementById('session').value = 'web-' + uid;
   document.getElementById('chat-stream').innerHTML = '';
+  currentTrips = []; currentDrafts = []; currentHandoffs = []; currentAuditEvents = [];
+  selectedDraft = null;
+  renderTripsTable([]); renderDraftsList([]); renderDraftDetail(null);
+  renderHandoffsTable([]); renderAuditTable([]);
+  document.getElementById('mem-session-box').textContent = 'Chưa tải dữ liệu.';
+  document.getElementById('mem-pref-box').textContent = 'Chưa tải dữ liệu.';
   document.getElementById('trace-raw-box').textContent = 'Đã chuyển sang vai trò ' + uid + '. Phiên làm việc được khởi tạo lại.';
 
   const isAdmin = (role === 'Admin');
@@ -1515,9 +1559,13 @@ function onUserChange() {
   document.getElementById('admin-actions').classList.toggle('hidden', !isAdmin);
   document.getElementById('approver-scope-box').classList.toggle('hidden', !isApprover);
 
-  appendSystemMsg(`Đã đăng nhập với tư cách: <strong>${esc(uid)}</strong> (${esc(role)}). Cơ chế phân quyền đã được khởi tạo.`);
+  appendSystemMsg(`Đang dùng tài khoản demo: <strong>${esc(uid)}</strong> (${esc(role)}). Dữ liệu hiển thị theo quyền của tài khoản đã chọn.`);
   renderPromptSuggestions();
   refreshInspector();
+  if (document.getElementById('view-schedule').classList.contains('active')) loadTrips();
+  if (document.getElementById('view-artifacts').classList.contains('active')) loadDrafts();
+  if (document.getElementById('view-handoffs').classList.contains('active')) loadHandoffs();
+  if (document.getElementById('view-audit').classList.contains('active')) loadAuditEvents();
 }
 
 function appendSystemMsg(html) {
@@ -1561,9 +1609,9 @@ function showTypingIndicator() {
   const role = currentRole();
   const stages = [
     `Đang phân tích yêu cầu & kiểm tra phạm vi quyền hạn ${role}...`,
-    `Đang tìm kiếm cơ sở tri thức chính sách & vector chunks...`,
-    `Đang thực thi quy trình chuẩn hóa & ghi bản nháp sandbox...`,
-    `Đang tổng hợp câu trả lời với trích dẫn đã xác thực...`
+    `Đang xử lý yêu cầu trong phạm vi được cấp...`,
+    `Đang chờ kết quả từ Agent...`,
+    `Đang chờ phản hồi...`
   ];
   let stageIdx = 0;
   const interval = setInterval(() => {
@@ -1616,20 +1664,22 @@ function appendBotMsg(data) {
   const route = data.route || 'UNKNOWN';
   const outcome = data.outcome || 'completed';
   const citationsCount = (data.citations || []).length;
-  const stepCount = (data.trace && data.trace.steps) ? data.trace.steps.length : (route === 'SELF_SERVE' ? 3 : 1);
+  const stepCount = data.step_count ?? 0;
+  const hasError = Boolean(data.error) || route === 'REJECT_SAFETY';
 
   let stepBanner = `
     <div class="agent-step-banner">
       <div class="banner-left">
-        <span class="step-check">✓</span>
-        <span class="step-title">${esc(stepCount)} bước xử lý hoàn thành</span>
-        <span class="step-pill">${esc(route)}</span>
-        <span class="badge-status badge-neutral" style="font-size:10px">${esc(outcome)}</span>
+        <span class="step-check" style="color:${hasError ? 'var(--red)' : 'var(--text-muted)'}">${hasError ? '!' : '•'}</span>
+        <span class="step-title">${esc(stepCount)} lượt gọi công cụ</span>
+        <span class="step-pill">${esc(uiLabel(route))}</span>
+        <span class="badge-status ${hasError ? 'badge-danger' : 'badge-neutral'}" style="font-size:10px">${esc(uiLabel(outcome))}</span>
       </div>
       <button class="step-toggle-btn" onclick="toggleTraceDetails(this)">Xem chi tiết ▾</button>
     </div>
     <div class="step-details-drawer">
       <div><strong>Tuyến xử lý (Route):</strong> ${esc(route)} · <strong>Ý định (Intent):</strong> ${esc(data.intent || 'n/a')}</div>
+      ${data.error ? `<div style="color:var(--red)"><strong>Lý do:</strong> ${esc(data.error.message)} <br><strong>Mã lỗi:</strong> ${esc(data.error.code)}</div>` : ''}
       <div><strong>Mã đối tượng:</strong> ${esc(data.record_id || 'n/a')} · <strong>Mã chuyển tiếp (Handoff ID):</strong> ${esc(data.handoff_id || 'none')}</div>
       ${data.citations && data.citations.length ? `<div><strong>Trích dẫn chính sách:</strong> ${esc(data.citations.join(', '))}</div>` : ''}
     </div>
@@ -1645,7 +1695,7 @@ function appendBotMsg(data) {
       <div class="msg-meta-footer">
         <span>Travel Ops Agent · v1.0</span>
         <span>•</span>
-        <span>Tuyến: ${esc(route)}</span>
+        <span>${esc(uiLabel(route))}</span>
         <span>•</span>
         <span>Trích dẫn: ${citationsCount}</span>
       </div>
@@ -1670,6 +1720,7 @@ async function sendTurn() {
   const user_id = document.getElementById('user').value;
   const session_id = document.getElementById('session').value.trim() || ('web-' + user_id);
   const payload = {message, user_id, session_id};
+  const generation = userGeneration;
 
   if (currentRole() === 'Approver') {
     const raw = document.getElementById('approval-scope').value;
@@ -1697,9 +1748,10 @@ async function sendTurn() {
 
     const data = await fetchRes.json();
     stopTyping();
+    if (generation !== userGeneration) return;
 
     if (!fetchRes.ok) {
-      appendSystemMsg(`<span style="color:var(--red)">Lỗi: ${esc(data.error || 'Yêu cầu không thành công')}</span>`);
+      appendSystemMsg(`<span style="color:var(--red)">Lỗi: ${esc(data.error || 'Yêu cầu không thành công. Hãy thử lại.')} · Mã lỗi: ${esc(data.code || 'unavailable')}</span>`);
       return;
     }
 
@@ -1718,7 +1770,7 @@ async function sendTurn() {
     refreshInspector();
   } catch (err) {
     stopTyping();
-    appendSystemMsg(`<span style="color:var(--red)">Lỗi Kết nối Mạng: ${esc(err.message)}</span>`);
+    if (generation === userGeneration) appendSystemMsg('<span style="color:var(--red)">Không nhận được phản hồi hợp lệ từ web demo. Hãy kiểm tra server và kết nối rồi thử lại.</span>');
   } finally {
     isAgentThinking = false;
   }
@@ -1726,10 +1778,11 @@ async function sendTurn() {
 
 // Quản lý Chuyến đi & Lịch trình
 async function loadTrips() {
-  const res = await fetch('/api/trips');
-  if (!res.ok) return;
-  currentTrips = await res.json();
-  renderTripsTable(currentTrips);
+  currentTrips = [];
+  await fetchPanel('/api/trips', data => { currentTrips = data; renderTripsTable(data); }, message => {
+    document.getElementById('trips-count-badge').textContent = 'Không tải được dữ liệu';
+    document.getElementById('trips-table-body').innerHTML = `<tr><td colspan="7" style="color:var(--red)">${esc(message)}</td></tr>`;
+  });
 }
 
 function renderTripsTable(trips) {
@@ -1742,7 +1795,7 @@ function renderTripsTable(trips) {
   }
   trips.forEach(t => {
     const tr = document.createElement('tr');
-    let statusBadge = '<span class="badge-status badge-ok">Đã duyệt (Confirmed)</span>';
+    let statusBadge = `<span class="badge-status badge-neutral">${esc(uiLabel(t.travel_status))}</span>`;
     if (t.travel_status === 'submitted') statusBadge = '<span class="badge-status badge-pending">Chờ xử lý (Submitted)</span>';
     else if (t.travel_status === 'draft') statusBadge = '<span class="badge-status badge-neutral">Bản nháp (Draft)</span>';
     else if (t.travel_status === 'cancelled') statusBadge = '<span class="badge-status badge-danger">Đã hủy (Cancelled)</span>';
@@ -1780,12 +1833,12 @@ function askAboutTrip(tripId) {
   sendTurn();
 }
 
-// Quản lý Bản nháp Sandbox (Draft Artifacts)
+// Quản lý Drafts · Bản nháp (Draft Artifacts)
 async function loadDrafts() {
-  const res = await fetch('/api/drafts');
-  if (!res.ok) return;
-  currentDrafts = await res.json();
-  renderDraftsList(currentDrafts);
+  currentDrafts = []; selectedDraft = null; renderDraftDetail(null);
+  await fetchPanel('/api/drafts', data => { currentDrafts = data; renderDraftsList(data); }, message => {
+    document.getElementById('drafts-list').innerHTML = `<p style="color:var(--red);padding:12px">${esc(message)}</p>`;
+  });
 }
 
 function renderDraftsList(drafts) {
@@ -1801,12 +1854,12 @@ function renderDraftsList(drafts) {
     item.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <strong style="color:var(--text-primary);font-size:12.5px">${esc(d.source_id)}</strong>
-        <span class="badge-status badge-route" style="font-size:10px">${esc(d.workflow)}</span>
+        <span class="badge-status badge-route" style="font-size:10px">${esc(uiLabel(d.workflow))}</span>
       </div>
       <div style="font-size:11px;color:var(--text-muted);font-family:monospace">${esc(d.draft_id)}</div>
       <div style="margin-top:6px;display:flex;justify-content:space-between;font-size:10.5px">
-        <span class="badge-status badge-ok">${esc(d.status)}</span>
-        <span style="color:var(--text-dim)">${esc(d.delivery_status || 'sandbox')}</span>
+        <span class="badge-status badge-ok">${esc(uiLabel(d.status))}</span>
+        <span style="color:var(--text-dim)">${esc(uiLabel(d.delivery_status || 'sandbox'))}</span>
       </div>
     `;
     item.onclick = () => {
@@ -1839,7 +1892,7 @@ function renderDraftDetail(draft) {
     const items = content.checklist_items || [];
     contentHtml = `
       <div style="margin-bottom:12px">
-        <h4 style="color:var(--text-primary);font-size:14px;margin-bottom:8px">Danh sách Checklist Trước Chuyến đi (${esc(content.trip_id)})</h4>
+        <h4 style="color:var(--text-primary);font-size:14px;margin-bottom:8px">Checklist trước chuyến đi (${esc(content.trip_id)})</h4>
         <div style="display:flex;flex-direction:column;gap:6px">
           ${items.map(it => `
             <div style="background:var(--bg-input);padding:8px 12px;border-radius:6px;border:1px solid var(--border);display:flex;align-items:center;gap:10px">
@@ -1855,11 +1908,11 @@ function renderDraftDetail(draft) {
     const fl = content.flight_facts || {};
     contentHtml = `
       <div style="margin-bottom:12px">
-        <h4 style="color:var(--text-primary);font-size:14px;margin-bottom:8px">Đơn Leo thang Gián đoạn Trong Chuyến đi (${esc(content.trip_id)})</h4>
+        <h4 style="color:var(--text-primary);font-size:14px;margin-bottom:8px">Bản nháp hỗ trợ sự cố chuyến đi (${esc(content.trip_id)})</h4>
         <div style="background:var(--bg-input);padding:12px;border-radius:8px;border:1px solid var(--border);font-size:12.5px;line-height:1.6">
           <div><strong>Chuyến bay:</strong> ${esc(fl.flight_id)} (${esc(fl.origin_airport)} → ${esc(fl.destination_airport)})</div>
           <div><strong>Loại Gián đoạn:</strong> ${esc(dis.type)} · <strong>Thời gian Trễ:</strong> ${esc(dis.delay_minutes)} phút</div>
-          <div style="margin-top:6px;color:var(--amber)"><strong>Khuyến nghị Hành động:</strong> ${esc(content.recommended_follow_up || 'Lưu giữ thông báo để làm thủ tục leo thang.')}</div>
+          <div style="margin-top:6px;color:var(--amber)"><strong>Khuyến nghị Hành động:</strong> ${esc(content.recommended_follow_up || 'Lưu thông báo sự cố để Travel Operations xem xét.')}</div>
         </div>
       </div>
     `;
@@ -1867,7 +1920,7 @@ function renderDraftDetail(draft) {
     const summary = content.summary || {};
     contentHtml = `
       <div style="margin-bottom:12px">
-        <h4 style="color:var(--text-primary);font-size:14px;margin-bottom:8px">Kiểm toán Báo cáo Chi phí Sau Chuyến đi (${esc(content.report_id || draft.source_id)})</h4>
+        <h4 style="color:var(--text-primary);font-size:14px;margin-bottom:8px">Rà soát chi phí sau chuyến đi (${esc(content.report_id || draft.source_id)})</h4>
         <div style="background:var(--bg-input);padding:12px;border-radius:8px;border:1px solid var(--border);font-size:12.5px;line-height:1.6">
           <div><strong>Tổng Chi phí:</strong> ${esc(summary.total_expenses || 'N/A')}</div>
           <div><strong>Yêu cầu Xem xét Đặc biệt:</strong> ${esc(content.review_required ? 'Có' : 'Không')}</div>
@@ -1880,8 +1933,8 @@ function renderDraftDetail(draft) {
   area.innerHTML = `
     <div>
       <div style="display:flex;gap:8px;margin-bottom:12px">
-        <span class="badge-status badge-ok">${esc(draft.status)}</span>
-        <span class="badge-status badge-route">${esc(draft.workflow)}</span>
+        <span class="badge-status badge-ok">${esc(uiLabel(draft.status))}</span>
+        <span class="badge-status badge-route">${esc(uiLabel(draft.workflow))}</span>
         <span class="badge-status badge-neutral">${esc(draft.source_id)}</span>
       </div>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Mã Bản nháp: <code style="color:var(--accent-purple)">${esc(draft.draft_id)}</code></div>
@@ -1903,14 +1956,13 @@ function copyCurrentDraft() {
   alert('Đã sao chép toàn bộ mã JSON bản nháp vào clipboard!');
 }
 
-// Quản lý Hàng đợi Chuyển tiếp Nhân sự
+// Quản lý Hàng đợi Handoff · Yêu cầu hỗ trợ
 async function loadHandoffs() {
-  const user_id = document.getElementById('user').value;
-  const res = await fetch(`/api/state?user_id=${encodeURIComponent(user_id)}`);
-  if (!res.ok) return;
-  const data = await res.json();
-  currentHandoffs = data.handoffs || [];
-  renderHandoffsTable(currentHandoffs);
+  currentHandoffs = [];
+  await fetchPanel('/api/state', data => { currentHandoffs = data.handoffs || []; renderHandoffsTable(currentHandoffs); }, message => {
+    document.getElementById('handoff-count-badge').textContent = 'Không tải được dữ liệu';
+    document.getElementById('handoff-table-body').innerHTML = `<tr><td colspan="7" style="color:var(--red)">${esc(message)}</td></tr>`;
+  });
 }
 
 function renderHandoffsTable(handoffs) {
@@ -1918,7 +1970,7 @@ function renderHandoffsTable(handoffs) {
   document.getElementById('handoff-count-badge').textContent = `Tổng cộng ${handoffs.length} phiếu`;
   tbody.innerHTML = '';
   if (!handoffs.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px">Hiện tại không có phiếu yêu cầu nào trong hàng đợi chuyển tiếp.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px">Chưa có yêu cầu hỗ trợ nào trong phạm vi của bạn.</td></tr>';
     return;
   }
   handoffs.forEach(h => {
@@ -1930,7 +1982,7 @@ function renderHandoffsTable(handoffs) {
       <td><span class="badge-status badge-route">${esc(h.intent || '')}</span></td>
       <td>${esc(h.handoff_reason || '')}</td>
       <td style="font-size:11.5px">${esc(h.verified_facts_summary || '')}</td>
-      <td><span class="badge-status badge-pending">Chờ Nhân sự Xử lý</span></td>
+      <td><span class="badge-status badge-pending">Chờ Travel Operations xử lý</span></td>
     `;
     tbody.appendChild(tr);
   });
@@ -1946,12 +1998,13 @@ function filterHandoffsTable() {
   renderHandoffsTable(filtered);
 }
 
-// Quản lý Nhật ký Kiểm toán (Audit Events)
+// Quản lý Audit log · Nhật ký hoạt động (Audit Events)
 async function loadAuditEvents() {
-  const res = await fetch('/api/audit');
-  if (!res.ok) return;
-  currentAuditEvents = await res.json();
-  renderAuditTable(currentAuditEvents);
+  currentAuditEvents = [];
+  await fetchPanel('/api/audit', data => { currentAuditEvents = data; renderAuditTable(data); }, message => {
+    document.getElementById('audit-count-badge').textContent = 'Không có quyền hoặc chưa tải được';
+    document.getElementById('audit-table-body').innerHTML = `<tr><td colspan="7" style="color:var(--red)">${esc(message)}</td></tr>`;
+  });
 }
 
 function renderAuditTable(events) {
@@ -1970,7 +2023,7 @@ function renderAuditTable(events) {
       <td>${esc(ev.actor_id)}</td>
       <td><span class="badge-status badge-route">${esc(ev.role)}</span></td>
       <td>${esc(ev.action)}</td>
-      <td><span class="badge-status ${ev.outcome === 'approved' ? 'badge-ok' : (ev.outcome === 'denied' ? 'badge-danger' : 'badge-neutral')}">${esc(ev.outcome)}</span></td>
+      <td><span class="badge-status ${ev.outcome === 'approved' ? 'badge-ok' : (ev.outcome === 'denied' ? 'badge-danger' : 'badge-neutral')}">${esc(uiLabel(ev.outcome))}</span></td>
       <td style="font-family:monospace;font-size:11px">${esc(ev.reason_code || '')}</td>
     `;
     tbody.appendChild(tr);
@@ -1990,13 +2043,14 @@ function filterAuditTable() {
 
 // Trình kiểm tra Bộ nhớ & Vết thực thi
 async function refreshInspector() {
-  const user_id = document.getElementById('user').value;
-  const session_id = document.getElementById('session').value.trim() || ('web-' + user_id);
-  const res = await fetch(`/api/state?user_id=${encodeURIComponent(user_id)}&session_id=${encodeURIComponent(session_id)}`);
-  if (!res.ok) return;
-  const data = await res.json();
-  document.getElementById('mem-session-box').textContent = JSON.stringify(data.session || {}, null, 2);
-  document.getElementById('mem-pref-box').textContent = JSON.stringify(data.preferences || {}, null, 2);
+  await fetchPanel('/api/state', data => {
+    const adminNotice = 'Admin không có quyền truy cập bộ nhớ cá nhân. Hãy chọn Employee, Reviewer hoặc Approver để xem bộ nhớ của tài khoản đó.';
+    document.getElementById('mem-session-box').textContent = currentRole() === 'Admin' ? adminNotice : JSON.stringify(data.session || {}, null, 2);
+    document.getElementById('mem-pref-box').textContent = currentRole() === 'Admin' ? adminNotice : JSON.stringify(data.preferences || {}, null, 2);
+  }, message => {
+    document.getElementById('mem-session-box').textContent = message;
+    document.getElementById('mem-pref-box').textContent = message;
+  });
 }
 
 // Xử lý Lệnh nhanh từ Command Bar (⌘K)
@@ -2025,6 +2079,7 @@ function handleCommand(e) {
 async function adminReset() {
   const user_id = document.getElementById('user').value;
   if (!confirm('Bạn có chắc chắn muốn xóa toàn bộ bộ nhớ tạm, bản nháp và dữ liệu log runtime để khôi phục sandbox?')) return;
+  try {
   const res = await fetch('/api/admin/reset', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -2041,6 +2096,9 @@ async function adminReset() {
   loadDrafts();
   loadHandoffs();
   loadAuditEvents();
+  } catch {
+    alert('Không nhận được phản hồi hợp lệ. Hãy kiểm tra server và kết nối trước khi thử lại.');
+  }
 }
 
 // Phím tắt toàn cục ⌘K / Ctrl+K
@@ -2064,7 +2122,7 @@ def reset_runtime_data(user_id: str) -> dict[str, Any]:
     """Admin-only cleanup of runtime logs, memory, drafts, and non-seed audit events."""
     user = get_user(user_id)
     if not user or user.get("role") != "Admin":
-        raise PermissionError("Only Admin can reset runtime traces, memory, and logs.")
+        raise PermissionError("Chỉ Admin được reset dữ liệu demo. Hãy chọn tài khoản Admin để xóa log, bộ nhớ và draft runtime.")
 
     clear_all_logs()
     draft_workspace.DRAFT_DIR.mkdir(parents=True, exist_ok=True)
@@ -2084,7 +2142,7 @@ def reset_runtime_data(user_id: str) -> dict[str, Any]:
 def build_state_payload(user_id: str, session_id: str) -> dict[str, Any]:
     user = get_user(user_id)
     if not user:
-        raise ValueError("Unknown mock user")
+        raise ValueError("Không tìm thấy tài khoản demo. Hãy chọn một người dùng trong danh sách.")
     session: dict[str, str] = {}
     preferences: dict[str, str] = {}
     if user["role"] in {"Employee", "Reviewer", "Approver"}:
@@ -2095,9 +2153,43 @@ def build_state_payload(user_id: str, session_id: str) -> dict[str, Any]:
         "user": user,
         "session": session,
         "preferences": preferences,
-        "handoffs": read_handoff_queue(),
-        "chat_history": read_chat_history(limit=50),
+        "handoffs": [row for row in read_handoff_queue() if user["role"] == "Admin" or row.get("user_id") == user_id],
+        "chat_history": [row for row in read_chat_history() if user["role"] == "Admin" or row.get("user_id") == user_id][-50:],
     }
+
+
+def build_collection_payload(kind: str, user_id: str) -> list[dict[str, Any]]:
+    """Apply the same role/owner boundaries to tab data as to chat tools."""
+    user = get_user(user_id)
+    if not user:
+        raise ValueError("Không tìm thấy tài khoản demo. Hãy chọn một người dùng trong danh sách.")
+    role = user["role"]
+    if kind == "audit":
+        if role != "Admin":
+            raise PermissionError("Chỉ Admin được xem audit log. Hãy chọn tài khoản Admin để xem lịch sử hoạt động.")
+        return _storage.load_dataset("audit_events.json")
+    if kind == "trips":
+        if role == "Approver":
+            raise PermissionError("Approver không được duyệt danh sách chuyến đi. Hãy xem chuyến được cấp trong approval scope qua tab Chat.")
+        trips = _storage.load_dataset("trips.json")
+        return [t for t in trips if role in {"Admin", "Reviewer"} or t.get("traveler_id") == user.get("traveler_id")]
+    if kind == "drafts":
+        if role not in {"Employee", "Reviewer"}:
+            raise PermissionError("Chỉ Employee và Reviewer được xem draft nghiệp vụ. Admin chỉ xem tổng quan và audit log; Approver chỉ đọc yêu cầu trong approval scope. Hãy chọn Employee hoặc Reviewer để xem draft.")
+        trips = _storage.load_dataset("trips.json")
+        expenses = _storage.load_dataset("expenses.json")
+        owned_ids = {r.get("trip_id") for r in trips if r.get("traveler_id") == user.get("traveler_id")}
+        owned_ids.update(r.get("report_id") for r in expenses if r.get("traveler_id") == user.get("traveler_id"))
+        drafts = []
+        for path in sorted(draft_workspace.DRAFT_DIR.glob("*.json")):
+            try:
+                draft = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(draft, dict) and (role == "Reviewer" or draft.get("source_id") in owned_ids):
+                drafts.append(draft)
+        return drafts
+    raise ValueError("Chức năng không được hỗ trợ.")
 
 
 def make_handler() -> type[BaseHTTPRequestHandler]:
@@ -2110,10 +2202,13 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(body)
 
+        def _send_error(self, status: int, code: str, message: str | None = None) -> None:
+            self._send_json(status, {"error": message or ERROR_MESSAGES.get(code, ERROR_MESSAGES["unavailable"]), "code": code, "retryable": code == "unavailable"})
+
         def _send_csv(self, filename: str, user_id: str | None) -> None:
             user = get_user(user_id or "")
             if not user or user.get("role") != "Admin":
-                self._send_json(HTTPStatus.FORBIDDEN, {"error": "CSV export is restricted to Admin."})
+                self._send_error(HTTPStatus.FORBIDDEN, "unauthorized_scope", "Chỉ Admin được tải log CSV vì file có thể chứa dữ liệu của nhiều người dùng. Hãy chọn tài khoản Admin.")
                 return
             path: Path = _resolve_log_dir() / filename
             data = path.read_bytes() if path.exists() else b""
@@ -2136,47 +2231,53 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 return
             if parsed.path == "/api/state":
                 qs = parse_qs(parsed.query)
-                user_id = qs.get("user_id", ["U-EMP-002"])[0]
-                session_id = qs.get("session_id", ["web-U-EMP-002"])[0]
+                user_id = qs.get("user_id", [""])[0]
+                session_id = qs.get("session_id", ["web-" + user_id])[0]
                 try:
                     self._send_json(HTTPStatus.OK, build_state_payload(user_id, session_id))
+                except (OSError, json.JSONDecodeError):
+                    self._send_error(HTTPStatus.SERVICE_UNAVAILABLE, "unavailable")
                 except ValueError as exc:
-                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                    self._send_error(HTTPStatus.BAD_REQUEST, "invalid_argument", str(exc))
                 return
-            if parsed.path == "/api/trips":
-                trips = _storage.load_dataset("trips.json")
-                self._send_json(HTTPStatus.OK, trips)
-                return
-            if parsed.path == "/api/drafts":
-                drafts = []
-                for p in sorted(draft_workspace.DRAFT_DIR.glob("*.json")):
-                    try:
-                        drafts.append(json.loads(p.read_text(encoding="utf-8")))
-                    except Exception:
-                        continue
-                self._send_json(HTTPStatus.OK, drafts)
-                return
-            if parsed.path == "/api/audit":
-                events = _storage.load_dataset("audit_events.json")
-                self._send_json(HTTPStatus.OK, events)
+            if parsed.path in {"/api/trips", "/api/drafts", "/api/audit"}:
+                qs = parse_qs(parsed.query)
+                try:
+                    data = build_collection_payload(parsed.path.rsplit("/", 1)[1], qs.get("user_id", [""])[0])
+                    self._send_json(HTTPStatus.OK, data)
+                except PermissionError as exc:
+                    self._send_error(HTTPStatus.FORBIDDEN, "unauthorized_scope", str(exc))
+                except json.JSONDecodeError:
+                    self._send_error(HTTPStatus.SERVICE_UNAVAILABLE, "unavailable", "Dữ liệu demo không đúng định dạng JSON. Hãy nhờ người quản trị kiểm tra dữ liệu.")
+                except ValueError:
+                    self._send_error(HTTPStatus.BAD_REQUEST, "invalid_argument", "Không tìm thấy tài khoản demo. Hãy chọn một người dùng trong danh sách.")
+                except OSError:
+                    self._send_error(HTTPStatus.SERVICE_UNAVAILABLE, "unavailable")
                 return
             if parsed.path in {"/api/export/chat_history.csv", "/api/export/handoff_queue.csv"}:
                 qs = parse_qs(parsed.query)
                 user_id = qs.get("user_id", [""])[0]
                 self._send_csv(Path(parsed.path).name, user_id)
                 return
-            self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
+            self._send_error(HTTPStatus.NOT_FOUND, "not_found", "Không tìm thấy chức năng được yêu cầu. Hãy kiểm tra lại đường dẫn.")
 
         def do_POST(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
-            length = int(self.headers.get("Content-Length", "0") or 0)
+            try:
+                length = int(self.headers.get("Content-Length", "0") or 0)
+            except ValueError:
+                length = 0
             if length <= 0 or length > 16384:
-                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Invalid payload size"})
+                self._send_error(HTTPStatus.BAD_REQUEST, "invalid_argument", "Nội dung yêu cầu phải có dữ liệu và không vượt quá 16 KiB. Hãy rút gọn rồi gửi lại.")
                 return
             try:
                 payload = json.loads(self.rfile.read(length).decode("utf-8"))
-            except json.JSONDecodeError as exc:
-                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_error(HTTPStatus.BAD_REQUEST, "invalid_argument", "Nội dung yêu cầu không phải JSON UTF-8 hợp lệ. Hãy kiểm tra định dạng rồi gửi lại.")
+                return
+
+            if not isinstance(payload, dict) or not isinstance(payload.get("user_id"), str):
+                self._send_error(HTTPStatus.BAD_REQUEST, "invalid_argument", "Yêu cầu phải là một JSON object có user_id dạng chuỗi. Hãy chọn lại tài khoản demo.")
                 return
 
             if parsed.path == "/api/admin/reset":
@@ -2184,13 +2285,26 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                     result = reset_runtime_data(payload.get("user_id", ""))
                     self._send_json(HTTPStatus.OK, result)
                 except PermissionError as exc:
-                    self._send_json(HTTPStatus.FORBIDDEN, {"error": str(exc)})
+                    self._send_error(HTTPStatus.FORBIDDEN, "unauthorized_scope", str(exc))
                 return
 
             if parsed.path != "/api/chat":
-                self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
+                self._send_error(HTTPStatus.NOT_FOUND, "not_found", "Không tìm thấy chức năng được yêu cầu. Hãy kiểm tra lại đường dẫn.")
+                return
+            if (not isinstance(payload.get("message"), str) or not payload["message"].strip()
+                    or not isinstance(payload.get("session_id", "web-demo-1"), str)
+                    or not payload.get("session_id", "web-demo-1").strip()):
+                self._send_error(HTTPStatus.BAD_REQUEST, "invalid_argument", "Tin nhắn và mã phiên phải là chuỗi không rỗng. Hãy nhập nội dung và kiểm tra Session ID.")
+                return
+            scope = payload.get("approval_scope")
+            if scope is not None and (not isinstance(scope, dict) or set(scope) != {"trip_id", "action_type"}
+                    or not all(isinstance(value, str) for value in scope.values())):
+                self._send_error(HTTPStatus.BAD_REQUEST, "invalid_argument", "Phạm vi phê duyệt phải gồm trip_id và action_type dạng chuỗi. Hãy chọn lại approval scope trong giao diện.")
                 return
             try:
+                if not get_user(payload["user_id"]):
+                    self._send_error(HTTPStatus.BAD_REQUEST, "invalid_argument", "Không tìm thấy tài khoản demo. Hãy chọn một người dùng trong danh sách.")
+                    return
                 result = handle_turn(
                     payload.get("message", ""),
                     payload.get("user_id", ""),
@@ -2198,7 +2312,10 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                     approval_scope=payload.get("approval_scope"),
                 )
             except ValueError as exc:
-                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                self._send_error(HTTPStatus.BAD_REQUEST, "invalid_argument", "Không thể xử lý yêu cầu. Hãy kiểm tra tài khoản, mã phiên và phạm vi phê duyệt.")
+                return
+            except (OSError, TypeError, AttributeError):
+                self._send_error(HTTPStatus.SERVICE_UNAVAILABLE, "unavailable")
                 return
             self._send_json(HTTPStatus.OK, result)
 

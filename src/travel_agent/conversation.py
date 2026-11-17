@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
+from travel_agent.errors import ERROR_MESSAGES, error_text
 from travel_agent.logging_utils import log_chat_turn
 from travel_agent.memory import (
     delete_session_value,
@@ -315,7 +316,7 @@ def _format_handoff_response(
         lines.extend(["", f"Trích dẫn đã ghi nhận (Recorded Citations): {' ; '.join(citations[:limit])}" if is_vi else f"Recorded Citations: {' ; '.join(citations[:limit])}"])
     lines.extend([
         "",
-        "Bước tiếp theo (Next Step): Yêu cầu này đã được chuyển tiếp đến nhân viên Vận hành Du lịch (Travel Operations Staff). No automated booking, payment, or approval decision was made."
+        "Bước tiếp theo: Yêu cầu được lưu trong hàng đợi demo để Travel Operations xem xét. Agent chưa thực hiện đặt chỗ, thanh toán hay quyết định phê duyệt."
         if is_vi
         else "Next Step: This case is queued for Travel Operations Staff. No automated booking, payment, or approval decision was made.",
     ])
@@ -774,6 +775,10 @@ def _handle_approver_turn(
     approval_scope: dict[str, str] | None,
     is_vi: bool = False,
 ) -> tuple[str, str, str, list[str], str, RunState]:
+    if decision.intent in {"posttrip", "admin_overview"} or decision.report_id:
+        state = RunState("pretrip", user_context, phase="approver_role_boundary")
+        state.finish("failed_validation")
+        return "REJECT_SAFETY", "failed_validation", "", [], "", state
     if not isinstance(approval_scope, dict) or not approval_scope.get("trip_id") or not approval_scope.get("action_type"):
         state = RunState("pretrip", user_context, phase="approver_scope_missing")
         state.finish("needs_human")
@@ -872,7 +877,7 @@ def _handoff_reason_for_workflow(outcome: str, result: dict[str, Any], is_vi: bo
     if outcome == "failed_budget":
         return "Thực thi đạt giới hạn ngân sách bước (step budget limit); chuyển tiếp nhân viên xem xét." if is_vi else "Execution reached step budget limit; escalated for staff review."
     if outcome == "partial":
-        return f"Quy trình không hoàn tất trọn vẹn ({result.get('error_code', 'partial_execution')})." if is_vi else f"Workflow did not complete cleanly ({result.get('error_code', 'partial_execution')})."
+        return result.get("message", "Quy trình chưa hoàn tất. Cần Travel Operations kiểm tra trước khi thử lại.")
     validation = result.get("validation")
     if isinstance(validation, dict):
         if validation.get("blocking"):
@@ -900,7 +905,7 @@ def handle_turn(
     """Process one conversational turn across 4 strict routes and log to UTF-8 CSV."""
     user = get_user(user_id)
     if not user:
-        raise ValueError("Unknown mock user")
+        raise ValueError("Không tìm thấy tài khoản demo. Hãy chọn một người dùng trong danh sách.")
 
     user_context = {"user_id": user["user_id"], "role": user["role"], "session_id": session_id}
     output_format = "concise"
@@ -1121,7 +1126,7 @@ def handle_turn(
 
             policy_note: str | None = None
             policy_handoff_reason: str | None = None
-            if intent == "mixed" and decision.policy_query and state.step_count < state.max_steps:
+            if intent == "mixed" and decision.policy_query and state.step_count < state.max_steps and not result_payload.get("error_code"):
                 temp_state = RunState(wf, user_context, max_steps=state.max_steps, run_id=state.run_id)
                 temp_state.set_phase("mixed_policy_qa")
                 temp_state.step_count = state.step_count
@@ -1208,6 +1213,50 @@ def handle_turn(
         )
         _audit_chat_event(user, state, decision.trip_id, decision.report_id, "staff_handoff")
 
+    # Failures always use Vietnamese, independently of the input/preferred language.
+    # Only expose messages produced by validated tools, never raw exceptions.
+    response_error = result_payload.get("error")
+    if not response_error and result_payload.get("error_code"):
+        code = result_payload["error_code"]
+        response_error = {"code": code, "message": ERROR_MESSAGES.get(code, ERROR_MESSAGES["unavailable"]), "retryable": False}
+    last_observation = state.safe_tool_results[-1] if state.safe_tool_results else {}
+    if not response_error and outcome != "completed" and last_observation.get("ok") is False:
+        response_error = {
+            "code": last_observation["error_code"],
+            "message": last_observation["error_message"],
+            "retryable": last_observation["retryable"],
+        }
+    if not response_error and route == "REJECT_SAFETY":
+        if intent == "invalid_id":
+            code, detail = "invalid_argument", "Mã không đúng định dạng. Hãy dùng TRIP-YYYY-NNN hoặc EXP-YYYY-NNN."
+        elif intent == "safety_adversarial":
+            code, detail = "not_allowed", "Yêu cầu chứa chỉ thị bỏ qua quy tắc an toàn hoặc vượt quyền. Hãy gửi lại tác vụ công tác trong phạm vi được cấp."
+        elif state.phase == "admin_boundary":
+            code, detail = "unauthorized_scope", "Admin chỉ được xem tổng quan chuyến đi và audit log; không được chạy workflow, tra cứu chính sách hay truy cập bộ nhớ. Hãy chọn Employee hoặc Reviewer cho tác vụ nghiệp vụ."
+        elif state.phase == "approver_role_boundary":
+            code, detail = "unauthorized_scope", "Approver chỉ được xem thông tin chuyến đi và chính sách thuộc approval scope đang chờ; không được rà soát báo cáo chi phí hay xem audit log. Hãy chọn Employee, Reviewer hoặc Admin phù hợp với chức năng cần dùng."
+        else:
+            code = result_payload.get("error_code", "invalid_argument")
+            detail = ERROR_MESSAGES.get(code, ERROR_MESSAGES["unavailable"])
+        response_error = {"code": code, "message": detail, "retryable": False}
+    if not response_error and state.phase == "approver_scope_missing":
+        response_error = {
+            "code": "unauthorized_scope", "retryable": False,
+            "message": "Approver chưa được cấp phạm vi phê duyệt (approval scope). Hãy chọn yêu cầu đang chờ trong mục Phạm vi phê duyệt.",
+        }
+    if not response_error and outcome in {"partial", "failed_budget", "failed_delivery"}:
+        code = "budget_exceeded" if outcome == "failed_budget" else "unavailable"
+        response_error = {"code": code, "message": result_payload.get("message") or ERROR_MESSAGES[code], "retryable": False}
+    if response_error:
+        detail = error_text(response_error)
+        if route == "HANDOFF_STAFF":
+            handoff_reason = detail
+            bot_response = _format_handoff_response(
+                handoff_id, detail, facts_summary, citations, output_format, result=result_payload, is_vi=True
+            )
+        else:
+            bot_response = detail
+
     log_chat_turn(
         session_id=session_id,
         user_id=user["user_id"],
@@ -1242,6 +1291,7 @@ def handle_turn(
         "workflow": workflow_name,
         "record_id": record_id,
         "result": result_payload,
+        "error": response_error,
         "run_id": state.run_id,
         "step_count": state.step_count,
         "trace": state.trace,

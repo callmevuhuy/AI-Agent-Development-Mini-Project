@@ -33,8 +33,8 @@ _RAG_ROLES = {"Employee", "Reviewer", "Approver"}
 
 
 # Trả về lỗi khi yêu cầu vượt ngoài phạm vi ủy quyền của người dùng
-def _scope_error() -> dict[str, Any]:
-    return failure("unauthorized_scope", "The requested resource is outside this user's scope.")
+def _scope_error(message: str = "Ngữ cảnh người dùng không hợp lệ. Hãy chọn lại tài khoản demo và phiên làm việc.") -> dict[str, Any]:
+    return failure("unauthorized_scope", message)
 
 
 # Dispatcher Authorization (Mục 12): Kiểm tra ủy quyền truy xuất dữ liệu theo đúng vai trò và phạm vi người dùng
@@ -58,26 +58,28 @@ def _authorize(
     
     # Admin chỉ được phép gọi các công cụ quản trị hệ thống (_ADMIN_TOOLS)
     if role == "Admin":
-        return None if tool_name in _ADMIN_TOOLS else _scope_error()
+        return None if tool_name in _ADMIN_TOOLS else _scope_error(
+            "Admin chỉ được xem tổng quan chuyến đi và audit log; không được chạy workflow nghiệp vụ, tạo draft, truy cập bộ nhớ hay tra cứu chính sách. Hãy chọn Employee hoặc Reviewer cho tác vụ nghiệp vụ."
+        )
         
     # Cấm các vai trò không phải Admin gọi công cụ quản trị
     if tool_name in _ADMIN_TOOLS:
-        return _scope_error()
+        return _scope_error("Chỉ Admin được xem tổng quan quản trị và audit log. Hãy chọn tài khoản Admin để sử dụng chức năng này.")
         
     # Chỉ duy nhất nhân viên (Employee) mới được phép gửi yêu cầu phê duyệt chuyến đi
     if tool_name == "request_approval" and role != "Employee":
-        return _scope_error()
+        return _scope_error("Chỉ Employee được tạo yêu cầu phê duyệt cho chuyến đi của chính mình. Reviewer và Approver không được gửi yêu cầu thay nhân viên.")
         
     # Nhân viên chỉ được nộp phê duyệt cho chuyến đi thuộc sở hữu của chính mình
     if tool_name == "request_approval":
         trip = get_trip_request(arguments.get("trip_id", ""))
         if not trip or trip.get("traveler_id") != user.get("traveler_id"):
-            return _scope_error()
+            return _scope_error("Không thể gửi yêu cầu phê duyệt: Employee chỉ được gửi cho chuyến đi của chính mình. Hãy kiểm tra mã chuyến đi trong danh sách của bạn.")
             
     # Thao tác ghi/xóa tùy chọn bộ nhớ bắt buộc phải có sự đồng thuận từ ứng dụng
     if tool_name in _MEMORY_TOOLS:
         if tool_name in {"set_preference", "delete_preference"} and user_context.get("memory_write_authorized") is not True:
-            return failure("not_allowed", "Persistent preference changes require an explicit user request.")
+            return failure("not_allowed", "Chỉ được lưu hoặc xóa tùy chọn khi bạn yêu cầu rõ ràng. Hãy nêu tùy chọn cần thay đổi.")
         return None
         
     # Tra cứu chính sách chỉ cho phép các vai trò trong _RAG_ROLES
@@ -94,11 +96,11 @@ def _authorize(
                 or scope.get("action_type") not in _APPROVER_RAG_CATEGORIES
                 or category not in _APPROVER_RAG_CATEGORIES[scope["action_type"]]
             ):
-                return _scope_error()
+                return _scope_error("Approver chỉ được tra cứu danh mục chính sách thuộc phạm vi phê duyệt (approval scope) do ứng dụng cấp. Hãy chọn phạm vi phù hợp hoặc nhờ Reviewer tra cứu.")
             # Yêu cầu phê duyệt tương ứng phải đang ở trạng thái chờ xử lý (pending)
             request = get_approval_request(scope["trip_id"], scope["action_type"])
             if not request or request.get("status") != "pending":
-                return _scope_error()
+                return _scope_error("Phạm vi phê duyệt không còn hiệu lực hoặc không có yêu cầu đang chờ (pending). Hãy chọn một yêu cầu pending được ứng dụng cấp.")
         return None
         
     # Reviewer có toàn quyền đọc và kiểm toán dữ liệu công tác toàn công ty
@@ -117,11 +119,11 @@ def _authorize(
             or arguments.get("trip_id") != scope.get("trip_id")
             or tool_name not in _APPROVER_READS[scope["action_type"]]
         ):
-            return _scope_error()
+            return _scope_error("Approver chỉ được đọc dữ liệu chuyến đi và loại thông tin thuộc đúng yêu cầu phê duyệt đang chờ (approval scope); không được xem chuyến khác, báo cáo chi phí hay tạo draft. Hãy chọn đúng phạm vi được cấp.")
         # Yêu cầu phê duyệt phải đang ở trạng thái pending
         request = get_approval_request(scope["trip_id"], scope["action_type"])
         if not request or request.get("status") != "pending":
-            return _scope_error()
+            return _scope_error("Phạm vi phê duyệt không còn hiệu lực hoặc không có yêu cầu đang chờ (pending). Hãy chọn một yêu cầu pending được ứng dụng cấp.")
         return None
         
     # Từ chối nếu vai trò không phải là Employee
@@ -136,17 +138,17 @@ def _authorize(
         trip_id = arguments.get("trip_id") or arguments.get("trip_facts", {}).get("trip_id")
         trip = get_trip_request(trip_id) if trip_id else None
         if trip is not None and trip["traveler_id"] != traveler_id:
-            return _scope_error()
+            return _scope_error("Employee chỉ được xem và xử lý chuyến đi của chính mình. Mã chuyến đi được yêu cầu không thuộc phạm vi của bạn. Hãy chọn chuyến trong danh sách của bạn hoặc nhờ Reviewer hỗ trợ.")
             
     # Từ chối nếu báo cáo chi phí thuộc về nhân viên khác
     elif tool_name in _EXPENSE_TOOLS or tool_name in _EXPENSE_DRAFT_TOOLS:
         report = get_expense_report(arguments["report_id"])
         if report is not None and report["traveler_id"] != traveler_id:
-            return _scope_error()
+            return _scope_error("Employee chỉ được xem và rà soát báo cáo chi phí của chính mình. Mã báo cáo được yêu cầu không thuộc phạm vi của bạn. Hãy kiểm tra lại mã báo cáo hoặc nhờ Reviewer hỗ trợ.")
             
     # Từ chối nếu xem hồ sơ của nhân viên khác
     elif tool_name == "get_traveler_profile" and arguments["traveler_id"] != traveler_id:
-        return _scope_error()
+        return _scope_error("Employee chỉ được xem hồ sơ công tác của chính mình. Hãy sử dụng tài khoản Reviewer nếu cần rà soát hồ sơ nhân viên khác.")
         
     # Đủ điều kiện ủy quyền -> Cho phép thực thi công cụ
     return None
@@ -191,20 +193,20 @@ def dispatch(
 ) -> dict[str, Any]:
     # Tên tool và tên workflow bắt buộc phải là chuỗi ký tự
     if not isinstance(tool_name, str) or not isinstance(workflow, str):
-        return failure("not_allowed", "Tool is not allowed in this workflow.")
+        return failure("not_allowed", "Công cụ không được phép chạy trong workflow hiện tại. Hãy chọn tác vụ phù hợp.")
         
     # Kiểm tra tool đã được đăng ký trong hệ thống
     spec = TOOL_REGISTRY.get(tool_name)
     if spec is None:
-        return failure("not_allowed", "Tool is not registered.")
+        return failure("not_allowed", "Công cụ chưa được đăng ký trong hệ thống. Hãy sử dụng chức năng được hỗ trợ.")
         
     # Tool phải thuộc allowlist của workflow hiện tại theo nguyên tắc đặc quyền tối thiểu
     if tool_name not in WORKFLOW_ALLOWLISTS.get(workflow, frozenset()):
-        return failure("not_allowed", "Tool is not allowed in this workflow.")
+        return failure("not_allowed", "Công cụ không được phép chạy trong workflow hiện tại. Hãy chọn tác vụ phù hợp.")
         
     # Kiểm định tham số đầu vào bằng JSON Schema chuẩn
     if not isinstance(arguments, dict) or not Draft202012Validator(spec.schema).is_valid(arguments):
-        return failure("invalid_argument", "Tool arguments do not match the registered schema.")
+        return failure("invalid_argument", "Tham số công cụ không hợp lệ. Hãy kiểm tra định dạng ID, các trường bắt buộc và giá trị được hỗ trợ.")
         
     # Ngữ cảnh người dùng bắt buộc phải là dictionary
     if not isinstance(user_context, dict):
@@ -214,9 +216,9 @@ def dispatch(
     try:
         denied = _authorize(tool_name, arguments, user_context)
     except (OSError, json.JSONDecodeError):
-        return failure("unavailable", "Mock authorization data could not be read.", retryable=True)
+        return failure("unavailable", "Không đọc được dữ liệu phân quyền demo. Hãy thử lại sau hoặc nhờ người quản trị kiểm tra dữ liệu.", retryable=True)
     except Exception:
-        return failure("unavailable", "Mock authorization failed safely.")
+        return failure("unavailable", "Không thể xác minh quyền truy cập. Yêu cầu đã dừng; hãy chọn lại tài khoản hoặc nhờ người quản trị hỗ trợ.")
         
     # Dừng ngay nếu bị từ chối ủy quyền
     if denied:
@@ -233,7 +235,7 @@ def dispatch(
         or steps_used < 0
         or steps_used >= max_steps
     ):
-        return failure("budget_exceeded", "The run has no remaining tool-call budget.")
+        return failure("budget_exceeded", "Quy trình đã hết số bước gọi công cụ cho phép. Hãy thu gọn yêu cầu hoặc nhờ Travel Operations hỗ trợ.")
         
     # Tự động phát hiện tham số handler hỗ trợ và thực thi an toàn
     try:
@@ -255,12 +257,12 @@ def dispatch(
             else:
                 raise
     except (OSError, json.JSONDecodeError):
-        return failure("unavailable", "Mock data could not be read.", retryable=True)
+        return failure("unavailable", "Không đọc được dữ liệu demo. Hãy thử lại sau hoặc nhờ người quản trị kiểm tra dữ liệu.", retryable=True)
     except Exception:
-        return failure("unavailable", "The mock tool failed safely.")
+        return failure("unavailable", "Công cụ demo gặp lỗi và đã dừng. Hãy thử lại sau hoặc nhờ người quản trị kiểm tra.")
         
     # Kiểm định hợp đồng kết quả đầu ra
     if not _valid_result(result):
-        return failure("unavailable", "The mock tool returned an invalid result.")
+        return failure("unavailable", "Công cụ demo trả về kết quả không đúng cấu trúc. Hãy nhờ người quản trị kiểm tra công cụ.")
         
     return result

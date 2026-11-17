@@ -11,6 +11,16 @@ _TRIP_ID = re.compile(r"^TRIP-\d{4}-\d{3}$")
 
 # Workflow State (Mục 9.1): Chốt trạng thái dừng và ghi nhận terminal outcome.
 def _stop(state: RunState, outcome: str, message: str, **details: Any) -> dict[str, Any]:
+    if details.get("error_code"):
+        for observation in reversed(state.safe_tool_results):
+            if observation.get("error_code") == details["error_code"]:
+                details["error"] = {
+                    "code": observation["error_code"],
+                    "message": observation["error_message"],
+                    "retryable": observation["retryable"],
+                }
+                message = observation["error_message"]
+                break
     state.finish(outcome)
     return {"outcome": outcome, "message": message, **details}
 
@@ -20,9 +30,9 @@ def run_intrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
     """Prepare safe disruption guidance and an idempotent support draft."""
     state.set_phase("intrip_validation")
     if not isinstance(trip_id, str) or not trip_id:
-        return _stop(state, "needs_input", "Please provide a trip ID.")
+        return _stop(state, "needs_input", "Vui lòng cung cấp mã chuyến đi theo định dạng TRIP-YYYY-NNN.")
     if not _TRIP_ID.fullmatch(trip_id):
-        return _stop(state, "failed_validation", "The trip ID format is invalid.")
+        return _stop(state, "failed_validation", "Mã chuyến đi không hợp lệ. Hãy dùng định dạng TRIP-YYYY-NNN.")
 
     state.set_phase("intrip_itinerary_lookup")
     itinerary_result = run_tool(state, "get_itinerary", {"trip_id": trip_id})
@@ -31,12 +41,12 @@ def run_intrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
         outcome = "failed_budget" if error["code"] == "budget_exceeded" else (
             "failed_validation" if error["code"] == "not_found" else "partial"
         )
-        return _stop(state, outcome, "Could not load the itinerary.", error_code=error["code"])
+        return _stop(state, outcome, "Không tải được hành trình chuyến đi. Hãy thử lại hoặc nhờ Travel Operations hỗ trợ.", error_code=error["code"])
     itinerary = itinerary_result["data"]
     disruption = itinerary.get("disruption")
     flight = itinerary.get("flight", {})
     if not isinstance(flight, dict):
-        return _stop(state, "partial", "The itinerary flight facts are malformed.", trip_id=trip_id)
+        return _stop(state, "partial", "Dữ liệu chuyến bay không đúng cấu trúc. Hãy nhờ người quản trị kiểm tra dữ liệu hành trình.", trip_id=trip_id)
     flight_facts = {
         key: flight[key]
         for key in ("flight_id", "origin", "origin_airport", "destination", "destination_airport", "status", "departure", "arrival")
@@ -46,7 +56,7 @@ def run_intrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
     if not disruption:
         if flight.get("status") == "cancelled":
             return _stop(
-                state, "needs_human", "The flight is marked cancelled, but the itinerary has no disruption details.",
+                state, "needs_human", "Chuyến bay có trạng thái đã hủy nhưng chưa có chi tiết sự cố. Cần Travel Operations xác minh.",
                 trip_id=trip_id, flight_facts=flight_facts, hotel=hotel_facts,
             )
         return _stop(
@@ -63,7 +73,7 @@ def run_intrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
     if not policy_result["ok"]:
         error = policy_result["error"]
         outcome = "failed_budget" if error["code"] == "budget_exceeded" else "partial"
-        return _stop(state, outcome, "Disruption policy retrieval did not complete.", error_code=error["code"], trip_id=trip_id)
+        return _stop(state, outcome, "Tra cứu chính sách hỗ trợ sự cố chưa hoàn tất. Hãy nhờ Travel Operations hỗ trợ.", error_code=error["code"], trip_id=trip_id)
     evidence = [
         {
             "chunk_id": chunk["chunk_id"], "doc_id": chunk["doc_id"],
@@ -94,12 +104,12 @@ def run_intrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
     if not draft_result["ok"]:
         error = draft_result["error"]
         outcome = "failed_budget" if error["code"] == "budget_exceeded" else "partial"
-        return _stop(state, outcome, "The support preview is ready, but the draft was not saved.", error_code=error["code"], support_draft=support_draft)
+        return _stop(state, outcome, "Đã chuẩn bị nội dung hỗ trợ nhưng chưa lưu được bản nháp. Hãy thử lại hoặc nhờ người quản trị kiểm tra.", error_code=error["code"], support_draft=support_draft)
 
     if not evidence or not grounding["grounded"] or not isinstance(disruption_type, str):
-        outcome, message = "needs_human", "Disruption details or policy guidance are incomplete."
+        outcome, message = "needs_human", "Chi tiết sự cố hoặc căn cứ chính sách chưa đầy đủ. Cần Travel Operations xác minh trước khi hướng dẫn tiếp."
     elif is_cancellation:
-        outcome, message = "needs_human", "A cancelled flight may require rebooking or lodging decisions by a human."
+        outcome, message = "needs_human", "Chuyến bay đã hủy; cần người phụ trách xem xét phương án đổi vé hoặc chỗ nghỉ."
     else:
         outcome, message = "completed", "Safe delay guidance is ready; no booking, spending, or external contact was made."
     return _stop(state, outcome, message, support_draft=support_draft, hotel=hotel_facts, draft=draft_result["data"])

@@ -12,6 +12,16 @@ _COUNTRY = {"Sydney": "Australia", "Singapore": "Singapore"}
 
 # Workflow State (Mục 9.1): Chốt trạng thái dừng và ghi nhận terminal outcome.
 def _stop(state: RunState, outcome: str, message: str, **details: Any) -> dict[str, Any]:
+    if details.get("error_code"):
+        for observation in reversed(state.safe_tool_results):
+            if observation.get("error_code") == details["error_code"]:
+                details["error"] = {
+                    "code": observation["error_code"],
+                    "message": observation["error_message"],
+                    "retryable": observation["retryable"],
+                }
+                message = observation["error_message"]
+                break
     state.finish(outcome)
     return {"outcome": outcome, "message": message, **details}
 
@@ -22,9 +32,9 @@ def run_pretrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
     # Bước 1 (Mục 8.1): Kiểm định định dạng trip_id
     state.set_phase("pretrip_validation")
     if not isinstance(trip_id, str) or not trip_id:
-        return _stop(state, "needs_input", "Please provide a trip ID.")
+        return _stop(state, "needs_input", "Vui lòng cung cấp mã chuyến đi theo định dạng TRIP-YYYY-NNN.")
     if not _TRIP_ID.fullmatch(trip_id):
-        return _stop(state, "failed_validation", "The trip ID format is invalid.")
+        return _stop(state, "failed_validation", "Mã chuyến đi không hợp lệ. Hãy dùng định dạng TRIP-YYYY-NNN.")
 
     # Bước 2 (Mục 8.1): Truy vấn dữ liệu chuyến đi từ Mock Travel Request System
     state.set_phase("pretrip_trip_lookup")
@@ -34,7 +44,7 @@ def run_pretrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
         outcome = "failed_budget" if error["code"] == "budget_exceeded" else (
             "failed_validation" if error["code"] == "not_found" else "partial"
         )
-        return _stop(state, outcome, "Could not load the trip record.", error_code=error["code"])
+        return _stop(state, outcome, "Không tải được hồ sơ chuyến đi. Hãy thử lại hoặc nhờ Travel Operations hỗ trợ.", error_code=error["code"])
     trip = trip_result["data"]
 
     # Kiểm tra các trường thiết yếu của chuyến đi (Mục 8.1: dừng/hỏi lại khi thiếu trường thiết yếu)
@@ -46,7 +56,7 @@ def run_pretrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
     ]
     if missing_fields:
         return _stop(
-            state, "needs_input", "The trip record is missing required information.",
+            state, "needs_input", "Hồ sơ chuyến đi thiếu thông tin bắt buộc. Vui lòng bổ sung các trường được liệt kê.",
             trip=trip, missing_fields=missing_fields,
             validation={
                 "trip_id": trip_id,
@@ -69,7 +79,7 @@ def run_pretrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
             approval_status = None
         else:
             outcome = "failed_budget" if error["code"] == "budget_exceeded" else "partial"
-            return _stop(state, outcome, "Could not load the trip approval status.", error_code=error["code"], trip=trip)
+            return _stop(state, outcome, "Không tải được trạng thái phê duyệt. Hãy thử lại hoặc nhờ Travel Operations hỗ trợ.", error_code=error["code"], trip=trip)
     else:
         approval_data = approval_result["data"]
         approval_status = approval_data.get("trip_approval_status") or approval_data.get("status")
@@ -85,7 +95,7 @@ def run_pretrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
     early_blocking = [item for item in blocking if item != "approval_pending"]
     if early_blocking:
         return _stop(
-            state, "needs_human", "The trip has a blocking travel or approval status.",
+            state, "needs_human", "Trạng thái chuyến đi hoặc phê duyệt đang chặn quy trình. Cần người phụ trách xem xét.",
             trip=trip,
             validation={
                 "trip_id": trip_id,
@@ -102,7 +112,7 @@ def run_pretrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
     required_categories = requirements_config["destination_policy_categories"].get(trip.get("destination"))
     if required_categories is None:
         return _stop(
-            state, "needs_human", "No configured policy requirements exist for this destination.",
+            state, "needs_human", "Chưa có yêu cầu chính sách cho điểm đến này trong dữ liệu demo. Cần Travel Operations kiểm tra.",
             trip=trip,
             validation={
                 "trip_id": trip_id,
@@ -130,7 +140,7 @@ def run_pretrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
         if not search_result["ok"]:
             error = search_result["error"]
             outcome = "failed_budget" if error["code"] == "budget_exceeded" else "partial"
-            return _stop(state, outcome, "Policy retrieval did not complete.", error_code=error["code"], trip=trip)
+            return _stop(state, outcome, "Tra cứu chính sách chưa hoàn tất. Hãy thử lại hoặc nhờ Travel Operations hỗ trợ.", error_code=error["code"], trip=trip)
         version_conflicts.extend(search_result["data"]["version_conflicts"])
         resolved_versions.extend(search_result["data"]["resolved_versions"])
         for chunk in search_result["data"]["results"]:
@@ -150,7 +160,7 @@ def run_pretrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
     if not final_result["ok"]:
         error = final_result["error"]
         outcome = "failed_budget" if error["code"] == "budget_exceeded" else "partial"
-        return _stop(state, outcome, "Trip requirements could not be validated.", error_code=error["code"], trip=trip)
+        return _stop(state, outcome, "Chưa kiểm tra được điều kiện công tác. Hãy nhờ Travel Operations xác minh dữ liệu.", error_code=error["code"], trip=trip)
     validation = final_result["data"]
     checklist = {
         "trip_id": trip_id,
@@ -164,9 +174,9 @@ def run_pretrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
     }
 
     if any(item != "approval_pending" for item in validation["blocking"]):
-        outcome, message = "needs_human", "The trip has a blocking travel or approval status."
+        outcome, message = "needs_human", "Trạng thái chuyến đi hoặc phê duyệt đang chặn quy trình. Cần người phụ trách xem xét."
     elif validation["missing_policy_categories"] or validation["invalid_evidence_refs"] or version_conflicts:
-        outcome, message = "needs_human", "Required policy evidence is incomplete; a human reviewer must resolve the gap."
+        outcome, message = "needs_human", "Thiếu căn cứ chính sách bắt buộc. Cần Reviewer kiểm tra và bổ sung trước khi tiếp tục."
     elif approval_status == "pending":
         outcome, message = "awaiting_approval", "The trip is pending approval; this checklist is only a preview."
     else:
@@ -180,5 +190,5 @@ def run_pretrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
     if not draft_result["ok"]:
         error = draft_result["error"]
         draft_outcome = "failed_budget" if error["code"] == "budget_exceeded" else "partial"
-        return _stop(state, draft_outcome, "The checklist preview is ready, but the draft was not saved.", error_code=error["code"], checklist=checklist, validation=validation)
+        return _stop(state, draft_outcome, "Đã chuẩn bị nội dung checklist nhưng chưa lưu được bản nháp. Hãy thử lại hoặc nhờ người quản trị kiểm tra.", error_code=error["code"], checklist=checklist, validation=validation)
     return _stop(state, outcome, message, trip=trip, checklist=checklist, validation=validation, draft=draft_result["data"])

@@ -73,7 +73,7 @@ def test_pretrip_missing_and_malformed_ids(record, expected):
 
 
 def test_application_identity_is_resolved_from_mock_user():
-    with pytest.raises(ValueError, match="Unknown mock user"):
+    with pytest.raises(ValueError, match="Không tìm thấy tài khoản demo"):
         run_workflow("pretrip", "U-EMP-999", "TRIP-2026-001")
     result, _ = run_workflow("pretrip", "U-EMP-002", "TRIP-2026-001")
     assert result["outcome"] == "partial" and "trip" not in result  # wrong employee scope reveals no trip data

@@ -11,7 +11,7 @@ def run(arguments: dict[str, Any], *, user_context: dict[str, Any], run_id: str)
         actor_id=user_context["user_id"], actor_role=user_context["role"], run_id=run_id,
     )
     if record.get("status") != "pending":
-        return failure("not_allowed", "This approval request has already been resolved.")
+        return failure("not_allowed", "Yêu cầu phê duyệt này đã được xử lý nên không thể tạo lại. Hãy kiểm tra trạng thái phê duyệt hoặc nhờ Travel Operations hỗ trợ.")
     result = success(record, "mock_approval_request_system", read_only=False)
     result["meta"]["reused"] = reused
     return result

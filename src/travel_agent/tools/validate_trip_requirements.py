@@ -10,13 +10,13 @@ from travel_agent.tools._result import failure, success
 # Tool Validation (Mục 8.1): Kiểm định các trường bắt buộc và đối chiếu bằng chứng chính sách.
 def run(arguments: dict[str, Any], *, user_context: dict[str, Any] | None = None) -> dict[str, Any]:
     if not isinstance(user_context, dict):
-        return failure("unauthorized_scope", "Application role context is required.")
+        return failure("unauthorized_scope", "Thiếu thông tin vai trò từ ứng dụng. Hãy chọn lại tài khoản demo.")
     supplied_facts = arguments["trip_facts"]
     trip_id = supplied_facts.get("trip_id")
     # Only accept the ID from caller; refresh all business facts from the source of truth.
     trip = get_trip_request(trip_id) if trip_id else None
     if trip is None:
-        return failure("not_found", "The requested mock record was not found.")
+        return failure("not_found", "Không tìm thấy bản ghi trong dữ liệu demo. Hãy kiểm tra lại mã chuyến đi hoặc báo cáo.")
 
     requirements = load_dataset("requirements.json")
     approval = get_trip_approval_status(trip_id) or {}
