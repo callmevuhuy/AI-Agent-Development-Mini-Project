@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlparse
 
 from travel_agent.conversation import handle_turn
 from travel_agent.workspace import draft_detail
+from travel_agent.trip_actions import available_actions, LABELS as TRIP_ACTION_LABELS, action_decision
 from travel_agent.errors import ERROR_MESSAGES
 from travel_agent.logging_utils import _resolve_log_dir, clear_all_logs, read_chat_history, read_handoff_queue
 from travel_agent.memory import get_preferences, get_session_state
@@ -374,6 +375,7 @@ _HTML = """<!doctype html>
     transition: opacity 0.15s;
   }
   .btn-sm:hover { opacity: 0.9; }
+  .btn-sm:disabled { opacity: 0.4; cursor: not-allowed; }
   .btn-danger { background: var(--red); color: #fff; }
   .btn-amber { background: var(--amber); color: #0f172a; }
 
@@ -954,7 +956,7 @@ _HTML = """<!doctype html>
 
     <div id="approver-scope-box" class="hidden">
       <div class="user-box-label" style="color:var(--accent-purple)">Phạm vi phê duyệt · Approval scope</div>
-      <select id="approval-scope">
+      <select id="approval-scope" onchange="filterTripsTable()">
         <option value="">Chọn yêu cầu được phân công</option>
       </select>
     </div>
@@ -1721,7 +1723,7 @@ function appendBotMsg(data) {
 }
 
 // Xử lý gửi tin nhắn với độ trễ ngẫu nhiên 3-6s ẩn
-async function sendTurn() {
+async function sendTurn(tripRequest = null) {
   if (isAgentThinking) return;
   const input = document.getElementById('chat-input');
   const message = input.value.trim();
@@ -1752,10 +1754,10 @@ async function sendTurn() {
 
   try {
     const [fetchRes] = await Promise.all([
-      fetch('/api/chat', {
+      fetch(tripRequest ? '/api/trip/action' : '/api/chat', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
+        body: JSON.stringify(tripRequest ? {user_id, session_id, approval_scope:payload.approval_scope, ...tripRequest} : payload)
       }),
       new Promise(r => setTimeout(r, delayMs))
     ]);
@@ -1824,10 +1826,12 @@ function renderAssignedRequests(rows) {
   }
   rows.forEach(row => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${esc(row.trip_id)}</td><td>${esc(row.assigned_approver_id)}</td><td colspan="3">${esc(row.action_label)}</td><td>Chờ xem xét</td><td><button class="btn-sm">${row.action_type === 'escalation' ? 'Xem sự cố' : 'Xem hồ sơ'}</button></td>`;
+    const matchesScope = document.getElementById('approval-scope').value === row.trip_id + '|' + row.action_type;
+    const action = (row.allowed_actions || [])[0];
+    tr.innerHTML = `<td>${esc(row.trip_id)}</td><td>${esc(row.assigned_approver_id)}</td><td colspan="3">${esc(row.action_label)}</td><td>Chờ xem xét</td><td><button class="btn-sm" ${matchesScope && action ? '' : 'disabled'}>${row.action_type === 'escalation' ? 'Xem sự cố' : 'Xem hồ sơ'}</button>${matchesScope ? '' : '<br><small>Chọn phạm vi trùng chuyến và loại yêu cầu để xem.</small>'}</td>`;
     tr.querySelector('button').onclick = () => {
-      document.getElementById('approval-scope').value = row.trip_id + '|' + row.action_type;
-      askAboutTrip(row.trip_id, row.action_type === 'escalation' ? 'itinerary' : 'details');
+      if (!matchesScope || !action) return;
+      askAboutTrip(row.trip_id, action, row.action_type);
     };
     body.appendChild(tr);
   });
@@ -1861,7 +1865,7 @@ function renderTripsTable(trips) {
       <td>${esc(t.purpose || 'N/A')}</td>
       <td>${statusBadge}<br>Yêu cầu hỗ trợ: ${esc((t.support_requests || []).map(r => uiLabel(r.status)).join(', ') || 'Chưa có')}</td>
       <td>
-        <select aria-label="Yêu cầu với chuyến đi">${currentRole() === 'Admin' ? '<option value="audit">Xem audit liên quan</option>' : '<option value="details">Xem chi tiết</option>'}${currentRole() !== 'Admin' ? '<option value="itinerary">Xem hành trình</option><option value="checklist">Kiểm tra checklist</option><option value="support">Yêu cầu hỗ trợ</option>' : ''}</select>
+        <select aria-label="Yêu cầu với chuyến đi">${(t.allowed_actions || []).map(action => `<option value="${esc(action)}">${esc(({details:'Xem chi tiết',itinerary:'Xem hành trình',checklist:'Kiểm tra checklist',support:'Yêu cầu hỗ trợ',audit:'Xem audit liên quan'})[action])}</option>`).join('')}</select>
         <button class="btn-sm" style="padding:4px 8px;font-size:11px" onclick="askAboutTrip('${esc(t.trip_id)}', this.previousElementSibling.value)">Thực hiện</button>
       </td>
     `;
@@ -1881,10 +1885,10 @@ function filterTripsTable() {
   renderTripsTable(filtered);
 }
 
-function askAboutTrip(tripId, action = "details") {
+function askAboutTrip(tripId, action = "details", requestActionType = null) {
   switchView('chat', document.querySelector('.nav-item'));
   document.getElementById('chat-input').value = ({audit:`Xem nhật ký kiểm toán cho ${tripId}`, details:`Xem chi tiết chuyến ${tripId}`, itinerary:`Xem hành trình ${tripId}`, checklist:`Chuẩn bị checklist ${tripId}`, support:`Tạo yêu cầu phê duyệt hỗ trợ sự cố gián đoạn ${tripId}`})[action];
-  sendTurn();
+  sendTurn({trip_id: tripId, action, ...(requestActionType ? {request_action_type: requestActionType} : {})});
 }
 
 // Quản lý Drafts · Bản nháp (Draft Artifacts)
@@ -2202,10 +2206,10 @@ def build_collection_payload(kind: str, user_id: str) -> list[dict[str, Any]]:
         return _storage.load_dataset("audit_events.json")
     if kind == "trips":
         if role == "Approver":
-            return list_assigned_pending_requests(user_id)
+            return [{**r, "allowed_actions": available_actions(role, r['action_type'])} for r in list_assigned_pending_requests(user_id)]
         trips = _storage.load_dataset("trips.json")
         requests = _storage.load_dataset("approval_requests.json")
-        return [{**t, "support_requests": [{"status": r["status"], "action_type": r["action_type"]} for r in requests if r.get("trip_id") == t["trip_id"]]} for t in trips if role in {"Admin", "Reviewer"} or t.get("traveler_id") == user.get("traveler_id")]
+        return [{**t, "allowed_actions": available_actions(role), "support_requests": [{"status": r["status"], "action_type": r["action_type"]} for r in requests if r.get("trip_id") == t["trip_id"]]} for t in trips if role in {"Admin", "Reviewer"} or t.get("traveler_id") == user.get("traveler_id")]
     if kind == "drafts":
         if role not in {"Employee", "Reviewer"}:
             raise PermissionError("Chỉ Employee và Reviewer được xem draft nghiệp vụ. Admin chỉ xem tổng quan và audit log; Approver chỉ đọc yêu cầu trong approval scope. Hãy chọn Employee hoặc Reviewer để xem draft.")
@@ -2340,9 +2344,19 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                     self._send_error(HTTPStatus.SERVICE_UNAVAILABLE, 'unavailable')
                 return
 
-            if parsed.path != "/api/chat":
+            if parsed.path not in {"/api/chat", "/api/trip/action"}:
                 self._send_error(HTTPStatus.NOT_FOUND, "not_found", "Không tìm thấy chức năng được yêu cầu. Hãy kiểm tra lại đường dẫn.")
                 return
+            if parsed.path == '/api/trip/action':
+                if set(payload) - {'user_id','session_id','approval_scope','trip_id','action','request_action_type'}:
+                    self._send_error(HTTPStatus.BAD_REQUEST, 'invalid_argument')
+                    return
+                try:
+                    action_decision(payload.get('action'), payload.get('trip_id'))
+                except (ValueError, TypeError):
+                    self._send_error(HTTPStatus.BAD_REQUEST, 'invalid_argument')
+                    return
+                payload['message'] = TRIP_ACTION_LABELS[payload['action']] + ' ' + payload['trip_id']
             if (not isinstance(payload.get("message"), str) or not payload["message"].strip()
                     or not isinstance(payload.get("session_id", "web-demo-1"), str)
                     or not payload.get("session_id", "web-demo-1").strip()):
@@ -2357,11 +2371,19 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 if not get_user(payload["user_id"]):
                     self._send_error(HTTPStatus.BAD_REQUEST, "invalid_argument", "Không tìm thấy tài khoản demo. Hãy chọn một người dùng trong danh sách.")
                     return
+                if parsed.path == '/api/trip/action' and get_user(payload['user_id'])['role'] == 'Approver':
+                    scope = payload.get('approval_scope') or {}
+                    if (not payload.get('request_action_type') or scope.get('trip_id') != payload['trip_id']
+                            or scope.get('action_type') != payload['request_action_type']):
+                        self._send_error(HTTPStatus.FORBIDDEN, 'unauthorized_scope', 'Yêu cầu này không khớp phạm vi phê duyệt đang chọn. Hãy chọn đúng chuyến và loại yêu cầu.')
+                        return
                 result = handle_turn(
                     payload.get("message", ""),
                     payload.get("user_id", ""),
                     session_id=payload.get("session_id", "web-demo-1"),
                     approval_scope=payload.get("approval_scope"),
+                    trip_action=payload.get('action') if parsed.path == '/api/trip/action' else None,
+                    action_trip_id=payload.get('trip_id') if parsed.path == '/api/trip/action' else None,
                 )
             except ValueError as exc:
                 self._send_error(HTTPStatus.BAD_REQUEST, "invalid_argument", "Không thể xử lý yêu cầu. Hãy kiểm tra tài khoản, mã phiên và phạm vi phê duyệt.")

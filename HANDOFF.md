@@ -66,6 +66,8 @@ Lịch sử chi tiết ở `CHANGELOG.md`; danh sách công việc và giới h�
 
 Trips có bốn tác vụ riêng: xem chi tiết, xem hành trình, kiểm tra checklist và yêu cầu hỗ trợ. Admin xem audit liên quan; Approver xem danh sách pending được phân công trong Trips, rồi đọc hồ sơ theo scope qua chat. Chọn tác vụ gửi đúng ý định, không ghép đọc dữ kiện với checklist. Ngữ cảnh phiên giữ tác vụ cần làm rõ và ngôn ngữ khi người dùng trả lời bằng ID.
 
+Trips không tự chọn hoặc đổi scope khi bấm dòng. Approver chọn scope trước; dòng trùng cả mã chuyến và loại yêu cầu mới bật nút xem. Endpoint `/api/trip/action` nhận tác vụ xác định, kiểm tra dòng với scope rồi dùng cùng bộ điều phối/dispatcher như chat. Không thay yêu cầu đọc chi tiết bằng đọc hành trình dưới scope hỗ trợ. Menu dùng `allowed_actions` theo role; server vẫn chặn cả thao tác bị ẩn nếu gọi trực tiếp. Hồi quy cho các role và hai chiều lệch scope ở `tests/test_trip_action_permissions.py`.
+
 Draft giữ mã `DR-…` độc lập với Trip/Expense nguồn. Employee chủ hồ sơ và Reviewer được mở đầy đủ dữ kiện nguồn, hành trình, các trường thiếu và nội dung/citation bản nháp. Chỉ ghi chú, mục đích đề xuất và checklist đề xuất được sửa. Các API `/api/draft/detail`, `/api/draft/save`, `/api/draft/recheck` kiểm tra quyền tại server; không cho sửa identity, approval, dữ kiện nguồn hoặc citation. Kiểm tra lại dùng nguồn thật của mock; nội dung đề xuất được giữ qua lần tạo lại, không tự làm nguồn đầy đủ.
 
 Thông báo không có chức năng không tự tạo phiếu. Pending hiển thị riêng với trạng thái chuyến; yêu cầu hỗ trợ có trạng thái riêng trên Trips. Thẻ prompt dùng nhãn kết quả mong đợi và mã CASE. Các nhánh an toàn kiểm tra nguyên câu tiếng Việt trước lookup/clarification.

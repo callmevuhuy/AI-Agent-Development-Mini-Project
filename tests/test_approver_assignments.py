@@ -30,7 +30,7 @@ def test_assignment_listing_is_minimal_and_isolated_by_approver():
     second = build_collection_payload('trips', 'U-APR-002')
     assert {r['trip_id'] for r in first} == {'TRIP-2026-001', 'TRIP-2026-002'}
     assert {r['trip_id'] for r in second} == {'TRIP-2026-006'}
-    assert all(set(r) == {'trip_id', 'action_type', 'action_label', 'status', 'assigned_approver_id'} for r in first + second)
+    assert all(set(r) == {'trip_id', 'action_type', 'action_label', 'status', 'assigned_approver_id', 'allowed_actions'} for r in first + second)
     assert all(r['status'] == 'pending' for r in first + second)
     assert read()['outcome'] == 'completed'
     assert read('U-APR-002', 'TRIP-2026-006')['outcome'] == 'completed'

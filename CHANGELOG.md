@@ -1,5 +1,13 @@
 # Nhật ký thay đổi
 
+## 2026-11-18 — Đồng bộ quyền giữa Trips và chat
+
+- Bỏ tự đổi scope khi bấm dòng Trips; chỉ bật nút trùng cả chuyến và loại yêu cầu với scope đang chọn.
+- Không tự chuyển yêu cầu xem chi tiết thành xem hành trình trong scope hỗ trợ. Hai loại dữ kiện được dispatcher kiểm tra riêng.
+- Trips gửi tác vụ xác định tới `/api/trip/action`; server đối chiếu dòng với scope và kiểm tra quyền qua cùng bộ điều phối/dispatcher của chat.
+- Menu theo quyền: Reviewer không có tạo yêu cầu phê duyệt, Admin chỉ có audit, Employee chỉ thấy chuyến của mình. Bổ sung hồi quy gọi trực tiếp API, lệch scope hai chiều, hai yêu cầu cùng Trip, quyền role và truy cập chéo; không tạo dữ kiện/draft/pending/handoff khi bị từ chối.
+- Kiểm chứng: 150 test pytest và 62 ca evaluator đạt; kiểm tra JavaScript gồm scope/nút/menu/payload. Server demo trả HTTP 403 cho yêu cầu Trips lệch scope.
+
 ## 2026-11-17 — Phân công Approver và testcase Reviewer
 
 - Thay thẻ hành trình Sydney bằng ca Reviewer yêu cầu tạo pending, phải bị từ chối theo role.

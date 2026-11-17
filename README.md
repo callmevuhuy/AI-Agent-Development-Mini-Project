@@ -154,6 +154,8 @@ Evaluator bổ sung 31 thẻ web vào 31 ca nền; tỷ lệ chọn tool và arg
 
 Trips của Approver chỉ trả metadata tối thiểu cho request `pending` có `assigned_approver_id` bằng tài khoản hiện tại. Hai seed 001/checklist_review và 002/escalation thuộc U-APR-001; không thêm Trip mới. Danh sách rỗng hiển thị thông báo bình thường, không tạo handoff. Server kiểm tra lại quyền khi đọc chi tiết; chọn scope phía client không tự cấp quyền. Thiếu phân công, đổi người hoặc request đã resolved đều làm scope cũ mất hiệu lực.
 
+Chọn scope tường minh trước khi xem; nút trên dòng khác chuyến hoặc khác loại yêu cầu bị khóa và không tự đổi scope. `checklist_review`/`publish_request` đọc hồ sơ chuyến và trạng thái duyệt; `escalation` đọc hành trình. Yêu cầu xem chi tiết không tự chuyển thành xem hành trình. Trips gửi tác vụ cụ thể qua `/api/trip/action`, dùng cùng bộ điều phối và dispatcher với chat. Server kiểm tra scope của dòng, phân công hiện tại, loại dữ kiện và quyền của tài khoản. Menu lấy `allowed_actions` từ server: Employee có bốn tác vụ; Reviewer không có tạo yêu cầu phê duyệt; Admin chỉ có audit.
+
 Yêu cầu pending mới được application mô phỏng phân công mặc định cho U-APR-001; model không được truyền người phê duyệt qua arguments. Helper quyết định bên ngoài tool set cũng phải kiểm tra phân công. Chưa có quyết định approve/reject qua chat.
 
 Lỗi quyền dùng câu “Bạn không có quyền truy cập dữ liệu hoặc thực hiện thao tác này”, giữ code unauthorized_scope. Không dùng câu này cho giới hạn chức năng (ví dụ đặt phòng) hoặc lỗi đầu vào. Thiếu scope được nhắc chọn request được phân công, không tự tạo phiếu hỗ trợ.

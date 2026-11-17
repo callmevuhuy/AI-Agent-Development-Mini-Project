@@ -111,6 +111,8 @@ Nhóm ca T01–T15 trong [ma trận kiểm thử](Given%20Docs/TEST_MATRIX.md) b
 
 Đợt rà soát 2026-11-17 thêm ma trận bốn Employee và ba role còn lại, thông báo scope chung/thao tác riêng, pending tường minh qua chat, preferences Approver, ID sai trước nhánh role và itinerary không được thay thế bằng trip facts. Xem kết quả chạy pytest thực tế; không giữ các số 53/54 cũ như kết quả hiện tại.
 
+Đợt sửa 2026-11-18 đối chiếu thêm đường vào Trips với chat: giữ scope người dùng đã chọn, khóa dòng không trùng cả chuyến và loại yêu cầu, kiểm tra lại tại server, không đổi loại dữ kiện để hợp thức hóa quyền. `tests/test_trip_action_permissions.py` kiểm tra hai chiều lệch scope, hai yêu cầu cùng Trip, role/ownership, gọi API trực tiếp và JavaScript của nút/menu/payload (`trip_actions_ui_smoke.cjs`, cần Node.js; thiếu Node thì riêng ca này được bỏ qua). Lần xác minh có Node.js: **150/150 pytest**, **62/62 evaluator** đạt. Các ca mới kiểm tra cùng nguyên tắc quyền tối thiểu ở mục 12; không mở rộng quyền Approver.
+
 Evaluator có 62 ca (31 nền và 31 prompt web), ghi các chỉ số hoàn thành, lựa chọn tool/arguments, căn cứ/citation, safety và hiệu quả. Báo cáo mới nhất: [after.md](eval/reports/after.md), [regression.md](eval/reports/regression.md). Giá trị 1.0 trên dữ liệu nhỏ không chứng minh chất lượng suy luận tổng quát. Phân loại tám nhóm lỗi ở [root_cause.md](eval/reports/root_cause.md).
 
 ## Mục 14: mười sản phẩm bàn giao

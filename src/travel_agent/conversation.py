@@ -799,7 +799,8 @@ def _handle_approver_turn(
     scoped_ctx = {**user_context, "approval_scope": approval_scope}
     trip_id = decision.trip_id or approval_scope["trip_id"]
     action_type = approval_scope["action_type"]
-    wf = "intrip" if action_type == "escalation" or decision.intent in {"intrip", "itinerary_read"} else "pretrip"
+    wants_itinerary = decision.intent in {"intrip", "itinerary_read"} or (action_type == "escalation" and decision.intent != "trip_details")
+    wf = "intrip" if wants_itinerary else "pretrip"
     state = RunState(wf, scoped_ctx, phase="approver_scoped_review")
 
     if decision.intent == "policy_qa":
@@ -822,7 +823,7 @@ def _handle_approver_turn(
         text, cits = _format_policy_qa(res["data"], "detailed", is_vi=is_vi)
         return "SELF_SERVE", "completed", text, cits, "", state
 
-    read_tool = "get_itinerary" if action_type == "escalation" or decision.intent in {"intrip", "itinerary_read"} else "get_trip_request"
+    read_tool = "get_itinerary" if wants_itinerary else "get_trip_request"
     res = run_tool(state, read_tool, {"trip_id": trip_id})
     if not res.get("ok"):
         state.finish("failed_validation")
@@ -906,6 +907,8 @@ def handle_turn(
     *,
     session_id: str = "demo-session",
     approval_scope: dict[str, str] | None = None,
+    trip_action: str | None = None,
+    action_trip_id: str | None = None,
 ) -> dict[str, Any]:
     """Process one conversational turn across 4 strict routes and log to UTF-8 CSV."""
     user = get_user(user_id)
@@ -924,7 +927,11 @@ def handle_turn(
         elif route_message_intent(message).route != "REJECT_SAFETY":
             set_session_value(user_context, "session_language", "vi" if is_vi else "en")
 
-    decision = _resolve_with_session(route_message_intent(message), user_context, message)
+    if trip_action is not None:
+        from travel_agent.trip_actions import action_decision
+        decision = action_decision(trip_action, action_trip_id)
+    else:
+        decision = _resolve_with_session(route_message_intent(message), user_context, message)
 
     route = decision.route
     intent = decision.intent

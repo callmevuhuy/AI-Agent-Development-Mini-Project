@@ -41,7 +41,7 @@ Giao diện mặc định có hai Employee đầu; U-EMP-003/004 có thể thử
 
 ## 4. Approver U-APR-001
 
-Trong Trips, Approver thấy các yêu cầu pending được phân công. Bấm Xem hồ sơ/Xem sự cố để chọn scope; hoặc chọn ở mục Phạm vi phê duyệt. Với `TRIP-2026-001 · checklist_review`:
+Trong Trips, Approver thấy các yêu cầu pending được phân công. Chọn trước ở mục Phạm vi phê duyệt; chỉ nút của dòng trùng cả chuyến và loại yêu cầu được bật. Bấm Xem hồ sơ/Xem sự cố giữ nguyên scope đang chọn. Với `TRIP-2026-001 · checklist_review`:
 
 | Câu gửi | Kỳ vọng |
 |---|---|
@@ -55,6 +55,10 @@ Trong Trips, Approver thấy các yêu cầu pending được phân công. Bấm
 | Remember I prefer detailed answers | Lưu preference của chính Approver |
 
 Đổi sang scope `TRIP-2026-002 · escalation`, hỏi chuyến bay 002 bị trễ để đọc itinerary hợp lệ. Bỏ scope hoặc dùng request không còn pending phải được nhắc chọn lại yêu cầu đang chờ.
+
+Kiểm tra chéo trên Trips: khi chọn scope hỗ trợ 002, nút xem hồ sơ checklist 001 bị khóa; đổi sang scope checklist 001 thì nút xem sự cố 002 bị khóa. Gọi trực tiếp `/api/trip/action` với dòng không khớp scope phải nhận HTTP 403, không trả dữ kiện và không tạo draft/pending/handoff. Ngay cả khi cùng mã Trip có hai loại yêu cầu, chúng vẫn là hai scope riêng. Trong chat, yêu cầu tường minh “Xem chi tiết chuyến TRIP-2026-002” dưới scope hỗ trợ phải bị từ chối; không được đổi thành đọc hành trình.
+
+Menu Employee có bốn tác vụ cho chuyến của mình; Reviewer có xem chi tiết, hành trình, checklist; Admin chỉ có audit liên quan. Gọi API trực tiếp với thao tác bị ẩn vẫn bị server từ chối. Các ca này nằm trong `tests/test_trip_action_permissions.py`.
 
 ## 5. Admin U-ADM-001
 
