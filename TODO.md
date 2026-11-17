@@ -18,11 +18,11 @@
 
 ## Xác minh
 
-Lần kiểm tra ngày 2026-11-17: **96/96 test pytest đạt**, bao gồm test HTTP thật; **31/31 ca evaluation đạt**, không có hồi quy trên tập ca đã lưu. `compileall` và kiểm tra diff không phát hiện lỗi.
+Lần kiểm tra ngày 2026-11-17: **109/109 test pytest đạt**, bao gồm test HTTP thật; **62/62 ca evaluation đạt**, không có hồi quy trên tập ca đã lưu. `compileall` và kiểm tra diff không phát hiện lỗi.
 
 Chạy các lệnh trong `README.md`; xem kết quả mới nhất ở `eval/reports/after.md` và `eval/reports/regression.md`. Số lượng test được xác định bởi pytest lúc chạy. Mốc 2026-11-16 có 53 test; mốc trước đợt rà soát này có 69 test. Các số lịch sử không thay thế kết quả kiểm tra hiện tại.
 
-Evaluator có 31 ca xác định. Baseline là lần đo đầu tiên sau khi triển khai, không phải số đo trước khi dự án tồn tại; không suy diễn thành mức cải thiện lịch sử.
+Evaluator có 62 ca xác định, gồm nguyên 31 prompt web. Baseline là lần đo đầu tiên sau khi triển khai, không phải số đo trước khi dự án tồn tại; không suy diễn thành mức cải thiện lịch sử.
 
 ## Chỉ cần khi mở rộng dự án
 

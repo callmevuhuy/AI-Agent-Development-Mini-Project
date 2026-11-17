@@ -37,6 +37,13 @@ def upsert_draft(workflow: str, source_id: str, content: dict[str, Any]) -> dict
     DRAFT_DIR.mkdir(parents=True, exist_ok=True)
     target = DRAFT_DIR / f"{draft_id}.json"
     reused = target.exists()
+    if reused:
+        previous = json.loads(target.read_text(encoding="utf-8"))
+        if "user_edits" not in content and "user_edits" in previous.get("content", {}):
+            draft["content"] = {**content, "user_edits": previous["content"]["user_edits"]}
+            serialized = json.dumps(draft, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+            if len(serialized.encode("utf-8")) > 32768:
+                raise ValueError("Draft exceeds the storage limit")
     temporary_path = None
     try:
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=DRAFT_DIR, delete=False) as temporary:

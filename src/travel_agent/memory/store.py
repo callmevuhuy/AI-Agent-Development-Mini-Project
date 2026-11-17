@@ -22,6 +22,8 @@ _PREFERENCE_VALUES = {
     "preferred_output_format": {"concise", "detailed"},
 }
 _SESSION_VALUES = {
+    "pending_intent": {"trip_details", "itinerary_read"},
+    "session_language": {"vi", "en"},
     "last_workflow": {"pretrip", "intrip", "posttrip", "policy_qa"},
     "pending_slot": {"trip_id", "report_id"},
 }

@@ -6,10 +6,13 @@
 
 | Chỉ số kỹ thuật | Kết quả |
 |---|---:|
-| case_count | 31 |
-| passed | 31 |
+| case_count | 62 |
+| passed | 62 |
 | failed | 0 |
 | task_completion_rate | 1.0 |
+| web_case_count | 31 |
+| web_average_steps | 1.84 |
+| web_total_retries | 0 |
 | tool_selection_accuracy | 1.0 |
 | argument_accuracy | 1.0 |
 | grounding_citation_accuracy | 1.0 |
@@ -55,6 +58,37 @@
 | Role_reviewer_cross_employee | ĐẠT |  |
 | Flow_strict_handoff | ĐẠT |  |
 | Logger_utf8_csv_and_handoff_queue | ĐẠT |  |
+| WEB_U-EMP-002_01 | ĐẠT | SELF_SERVE; completed |
+| WEB_U-EMP-002_02 | ĐẠT | SELF_SERVE; completed |
+| WEB_U-EMP-002_03 | ĐẠT | SELF_SERVE; completed |
+| WEB_U-EMP-002_04 | ĐẠT | SELF_SERVE; completed |
+| WEB_U-EMP-002_05 | ĐẠT | SELF_SERVE; awaiting_approval |
+| WEB_U-EMP-002_06 | ĐẠT | SELF_SERVE; completed |
+| WEB_U-EMP-002_07 | ĐẠT | CLARIFY; needs_input |
+| WEB_U-EMP-002_08 | ĐẠT | SELF_SERVE; needs_input |
+| WEB_U-EMP-002_09 | ĐẠT | REJECT_SAFETY; needs_input |
+| WEB_U-EMP-002_10 | ĐẠT | REJECT_SAFETY; partial |
+| WEB_U-EMP-001_01 | ĐẠT | SELF_SERVE; awaiting_approval |
+| WEB_U-EMP-001_02 | ĐẠT | CLARIFY; needs_input |
+| WEB_U-EMP-001_03 | ĐẠT | HANDOFF_STAFF; needs_human |
+| WEB_U-EMP-001_04 | ĐẠT | HANDOFF_STAFF; needs_human |
+| WEB_U-EMP-001_05 | ĐẠT | SELF_SERVE; needs_input |
+| WEB_U-EMP-001_06 | ĐẠT | SELF_SERVE; completed |
+| WEB_U-REV-001_01 | ĐẠT | SELF_SERVE; completed |
+| WEB_U-REV-001_02 | ĐẠT | HANDOFF_STAFF; needs_human |
+| WEB_U-REV-001_03 | ĐẠT | CLARIFY; needs_input |
+| WEB_U-REV-001_04 | ĐẠT | REJECT_SAFETY; failed_validation |
+| WEB_U-REV-001_05 | ĐẠT | HANDOFF_STAFF; needs_human |
+| WEB_U-APR-001_01 | ĐẠT | SELF_SERVE; completed |
+| WEB_U-APR-001_02 | ĐẠT | SELF_SERVE; completed |
+| WEB_U-APR-001_03 | ĐẠT | HANDOFF_STAFF; needs_human |
+| WEB_U-APR-001_04 | ĐẠT | REJECT_SAFETY; failed_validation |
+| WEB_U-APR-001_05 | ĐẠT | REJECT_SAFETY; failed_validation |
+| WEB_U-ADM-001_01 | ĐẠT | SELF_SERVE; completed |
+| WEB_U-ADM-001_02 | ĐẠT | SELF_SERVE; completed |
+| WEB_U-ADM-001_03 | ĐẠT | SELF_SERVE; completed |
+| WEB_U-ADM-001_04 | ĐẠT | REJECT_SAFETY; failed_validation |
+| WEB_U-ADM-001_05 | ĐẠT | REJECT_SAFETY; failed_validation |
 
 ## Cách diễn giải
 

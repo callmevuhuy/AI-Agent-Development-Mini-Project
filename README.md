@@ -68,7 +68,7 @@ Lịch giả lập nằm trong khoảng `2026-12-01` đến `2027-01-07`. Dùng 
 |---|---|
 | `SELF_SERVE` | Lời chào, danh sách chuyến theo quyền, quy trình nghiệp vụ, tra cứu chính sách, quản lý tùy chọn, tạo yêu cầu pending tường minh và chức năng quản trị chỉ đọc |
 | `CLARIFY` | Thiếu ID, nhiều chuyến phù hợp, ngày không khớp hoặc thiếu thông tin/chứng từ |
-| `HANDOFF_STAFF` | Thiếu căn cứ, xung đột chính sách, sự cố cần người xử lý, chuyến bị hủy hoặc yêu cầu ngoài khả năng tự động |
+| `HANDOFF_STAFF` | Thiếu căn cứ, xung đột chính sách, sự cố cần người xử lý, chuyến bị hủy hoặc người dùng yêu cầu chuyển hỗ trợ |
 | `REJECT_SAFETY` | ID sai, chỉ thị vượt quy tắc, thao tác bị cấm theo role hoặc dữ liệu ngoài scope |
 
 `request_approval` tạo pending khi Employee yêu cầu rõ ràng, ví dụ `Yêu cầu phê duyệt checklist TRIP-2026-006`. Yêu cầu quyết định phê duyệt qua chat bị từ chối riêng, không bị nhầm thành thao tác tạo pending.
@@ -84,7 +84,7 @@ Lịch giả lập nằm trong khoảng `2026-12-01` đến `2027-01-07`. Dùng 
 
 ## Memory và dispatcher
 
-Session memory giữ `active_trip_id`, `active_report_id`, `last_workflow`, `pending_slot` theo người dùng và phiên; TTL mặc định 30 phút, gia hạn khi ghi. Preferences chỉ gồm ngôn ngữ và định dạng phản hồi, chỉ ghi/xóa khi người dùng yêu cầu. Dữ kiện nghiệp vụ luôn lấy lại từ công cụ.
+Session memory giữ `active_trip_id`, `active_report_id`, `last_workflow`, `pending_slot`, `pending_intent`, `session_language` theo người dùng và phiên; TTL mặc định 30 phút, gia hạn khi ghi. Preferences chỉ gồm ngôn ngữ và định dạng phản hồi, chỉ ghi/xóa khi người dùng yêu cầu. Dữ kiện nghiệp vụ luôn lấy lại từ công cụ.
 
 Dispatcher kiểm tra registry, allowlist theo workflow, JSON Schema, quyền theo role/scope, ngân sách và cấu trúc kết quả. Orchestrator điều phối retry và ghi trace. Mặc định có 8 bước cho một `RunState`, trần cấu hình 12; chat pre-trip/mixed dùng 10. Lookup phụ có state riêng nên đây không phải trần tổng cho toàn bộ tin nhắn. Chỉ retry lỗi `retryable=true`, tối đa hai lần sau lần gọi đầu.
 
@@ -139,3 +139,21 @@ Xem [kịch bản demo](demo/DEMO_SCENARIOS.md), [ma trận kiểm thử](Given%
 - Kiểm tra căn cứ dùng từ khóa, câu và phủ định; chưa có mô hình suy luận ngữ nghĩa hoặc LLM bên ngoài.
 - JSON/CSV cục bộ chưa có cơ sở dữ liệu, đăng nhập, mã hóa hay audit bất biến cấp production. Memory chưa có cơ chế giải quyết ghi đồng thời ở nhiều tiến trình.
 - Agent chỉ tạo bản nháp và yêu cầu pending. Đặt vé, thanh toán, hoàn tiền, quyết định phê duyệt, gửi email, lập lịch nền và tích hợp bên ngoài nằm ngoài phạm vi.
+
+## Cập nhật workspace và phản hồi
+
+Trips có bốn tác vụ riêng: xem chi tiết, xem hành trình, kiểm tra checklist và yêu cầu hỗ trợ. Admin xem audit liên quan; Approver xem danh sách pending được phân công trong Trips, rồi đọc hồ sơ theo scope qua chat. Chọn tác vụ gửi đúng ý định, không ghép đọc dữ kiện với checklist. Ngữ cảnh phiên giữ tác vụ cần làm rõ và ngôn ngữ khi người dùng trả lời bằng ID.
+
+Draft giữ mã `DR-…` độc lập với Trip/Expense nguồn. Employee chủ hồ sơ và Reviewer được mở đầy đủ dữ kiện nguồn, hành trình, các trường thiếu và nội dung/citation bản nháp. Chỉ ghi chú, mục đích đề xuất và checklist đề xuất được sửa. Các API `/api/draft/detail`, `/api/draft/save`, `/api/draft/recheck` kiểm tra quyền tại server; không cho sửa identity, approval, dữ kiện nguồn hoặc citation. Kiểm tra lại dùng nguồn thật của mock; nội dung đề xuất được giữ qua lần tạo lại, không tự làm nguồn đầy đủ.
+
+Thông báo không có chức năng không tự tạo phiếu. Pending hiển thị riêng với trạng thái chuyến; yêu cầu hỗ trợ có trạng thái riêng trên Trips. Thẻ prompt dùng nhãn kết quả mong đợi và mã CASE. Các nhánh an toàn kiểm tra nguyên câu tiếng Việt trước lookup/clarification.
+
+Evaluator bổ sung 31 thẻ web vào 31 ca nền; tỷ lệ chọn tool và arguments đo trên các thẻ, số bước/retry lấy từ trace. Task completion loại các ca safety khỏi mẫu số. Grounding vẫn chỉ có claim đại diện; chưa phải benchmark ngữ nghĩa rộng.
+
+## Yêu cầu được phân công cho Approver
+
+Trips của Approver chỉ trả metadata tối thiểu cho request `pending` có `assigned_approver_id` bằng tài khoản hiện tại. Hai seed 001/checklist_review và 002/escalation thuộc U-APR-001; không thêm Trip mới. Danh sách rỗng hiển thị thông báo bình thường, không tạo handoff. Server kiểm tra lại quyền khi đọc chi tiết; chọn scope phía client không tự cấp quyền. Thiếu phân công, đổi người hoặc request đã resolved đều làm scope cũ mất hiệu lực.
+
+Yêu cầu pending mới được application mô phỏng phân công mặc định cho U-APR-001; model không được truyền người phê duyệt qua arguments. Helper quyết định bên ngoài tool set cũng phải kiểm tra phân công. Chưa có quyết định approve/reject qua chat.
+
+Lỗi quyền dùng câu “Bạn không có quyền truy cập dữ liệu hoặc thực hiện thao tác này”, giữ code unauthorized_scope. Không dùng câu này cho giới hạn chức năng (ví dụ đặt phòng) hoặc lỗi đầu vào. Thiếu scope được nhắc chọn request được phân công, không tự tạo phiếu hỗ trợ.

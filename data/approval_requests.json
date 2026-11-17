@@ -2,11 +2,13 @@
   {
     "trip_id": "TRIP-2026-001",
     "action_type": "checklist_review",
+    "assigned_approver_id": "U-APR-001",
     "status": "pending"
   },
   {
     "trip_id": "TRIP-2026-002",
     "action_type": "escalation",
+    "assigned_approver_id": "U-APR-001",
     "status": "pending"
   }
 ]

@@ -68,6 +68,8 @@ def _authorize(tool_name: str, arguments: dict[str, Any], user_context: dict[str
                 or not isinstance(scope.get("action_type"), str) or scope["action_type"] not in _APPROVER_READS):
             return scope_error("Chưa có phạm vi phê duyệt hợp lệ. Hãy chọn yêu cầu đang chờ trong mục Phạm vi phê duyệt.")
         request = get_approval_request(scope["trip_id"], scope["action_type"])
+        if request and request.get("status") == "pending" and request.get("assigned_approver_id") != user_id:
+            return scope_error()
         if not request or request.get("status") != "pending":
             return scope_error("Phạm vi phê duyệt không còn hiệu lực hoặc không có yêu cầu đang chờ. Hãy chọn lại yêu cầu pending được cấp.")
         if tool_name == "search_travel_policy":

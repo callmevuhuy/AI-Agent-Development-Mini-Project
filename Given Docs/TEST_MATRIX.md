@@ -2,7 +2,7 @@
 
 ## 1. Tiêu chí đánh giá
 
-Kiểm tra cả happy case và ca không thành công. Mỗi ca cần xác nhận tuyến xử lý, outcome, dữ kiện/citation, thông báo lỗi và side effect. Không chỉ kiểm tra chuỗi thông báo. Pytest dùng dữ liệu tạm; evaluator lưu chỉ số, kết quả từng ca và trace. Bộ evaluator có 31 ca; số pytest hiện tại được in khi chạy, không dùng số lịch sử 53/69 thay cho kết quả mới.
+Kiểm tra cả happy case và ca không thành công. Mỗi ca cần xác nhận tuyến xử lý, outcome, dữ kiện/citation, thông báo lỗi và side effect. Không chỉ kiểm tra chuỗi thông báo. Pytest dùng dữ liệu tạm; evaluator lưu chỉ số, kết quả từng ca và trace. Bộ evaluator có 62 ca (31 nền và 31 prompt web); số pytest hiện tại được in khi chạy, không dùng số lịch sử 53/69 thay cho kết quả mới.
 
 | Mã | Đầu vào/tình huống | Kết quả mong đợi | Điều cần chứng minh |
 |---|---|---|---|

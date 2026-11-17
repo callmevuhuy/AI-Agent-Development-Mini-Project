@@ -73,7 +73,7 @@ Nguồn: [A](src/travel_agent/workflows/a_pretrip.py), [B](src/travel_agent/work
 
 [RunState](src/travel_agent/state.py) giữ ID lượt, workflow/phase, context, số bước, budget, kết quả tool an toàn, trace và outcome.
 
-[Memory store](src/travel_agent/memory/store.py) tách session theo user/phiên và preferences theo user. Session chỉ có bốn khóa được cấp và TTL 30 phút; hết hạn được xử lý khi đọc. Preferences chỉ gồm ngôn ngữ và định dạng; ghi/xóa cần đồng ý rõ ràng. Có công cụ xem/xóa. Không nhận khóa lưu dữ liệu nhạy cảm hoặc nguyên văn hội thoại.
+[Memory store](src/travel_agent/memory/store.py) tách session theo user/phiên và preferences theo user. Session chỉ có các khóa được cấp, gồm ngữ cảnh tác vụ đang làm rõ và ngôn ngữ phiên và TTL 30 phút; hết hạn được xử lý khi đọc. Preferences chỉ gồm ngôn ngữ và định dạng; ghi/xóa cần đồng ý rõ ràng. Có công cụ xem/xóa. Không nhận khóa lưu dữ liệu nhạy cảm hoặc nguyên văn hội thoại.
 
 CSV hội thoại là log riêng có lọc mẫu token/số thẻ; không được mô tả toàn hệ thống là không lưu nội dung chat. Bộ lọc chưa bao phủ mọi PII.
 
@@ -111,7 +111,7 @@ Nhóm ca T01–T15 trong [ma trận kiểm thử](Given%20Docs/TEST_MATRIX.md) b
 
 Đợt rà soát 2026-11-17 thêm ma trận bốn Employee và ba role còn lại, thông báo scope chung/thao tác riêng, pending tường minh qua chat, preferences Approver, ID sai trước nhánh role và itinerary không được thay thế bằng trip facts. Xem kết quả chạy pytest thực tế; không giữ các số 53/54 cũ như kết quả hiện tại.
 
-Evaluator có 31 ca, ghi các chỉ số hoàn thành, lựa chọn tool/arguments, căn cứ/citation, safety và hiệu quả. Báo cáo mới nhất: [after.md](eval/reports/after.md), [regression.md](eval/reports/regression.md). Giá trị 1.0 trên dữ liệu nhỏ không chứng minh chất lượng suy luận tổng quát. Phân loại tám nhóm lỗi ở [root_cause.md](eval/reports/root_cause.md).
+Evaluator có 62 ca (31 nền và 31 prompt web), ghi các chỉ số hoàn thành, lựa chọn tool/arguments, căn cứ/citation, safety và hiệu quả. Báo cáo mới nhất: [after.md](eval/reports/after.md), [regression.md](eval/reports/regression.md). Giá trị 1.0 trên dữ liệu nhỏ không chứng minh chất lượng suy luận tổng quát. Phân loại tám nhóm lỗi ở [root_cause.md](eval/reports/root_cause.md).
 
 ## Mục 14: mười sản phẩm bàn giao
 

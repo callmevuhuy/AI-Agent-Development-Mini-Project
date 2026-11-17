@@ -20,7 +20,7 @@ Dự án Global Business Travel Operations Agent nằm tại thư mục gốc c�
 | 3. Trạng thái và quy trình | RunState, trace, retry, ba workflow A/B/C, bản nháp có ID ổn định |
 | 4. RAG | BM25 ngoại tuyến, từ đồng nghĩa tiếng Anh, trích dẫn metadata, loại injection, kiểm tra từ khóa/phủ định và xung đột phiên bản |
 | 5. Memory và Approver | Session có TTL, preferences theo user, ghi/xóa có đồng ý, Approver chỉ đọc scope pending |
-| 6. Kiểm thử và demo | Pytest, evaluator 31 ca, báo cáo trước/sau, hồi quy, CLI và web demo |
+| 6. Kiểm thử và demo | Pytest, evaluator 62 ca (gồm 31 prompt web), báo cáo trước/sau, hồi quy, CLI và web demo |
 
 Ngày 2026-11-16 hoàn thiện định tuyến bốn luồng, lookup tự nhiên, kiểm tra ngày bay, chi tiết nhân viên, thông tin thiếu, memory hội thoại và CSV UTF-8 BOM. Mốc đó ghi nhận 53 test; các số này là lịch sử, không phải số test hiện tại.
 
@@ -61,3 +61,13 @@ Commit/push: chỉ thực hiện khi được yêu cầu
 ```
 
 Lịch sử chi tiết ở `CHANGELOG.md`; danh sách công việc và giới hạn ở `TODO.md`.
+
+## Cập nhật workspace và phản hồi
+
+Trips có bốn tác vụ riêng: xem chi tiết, xem hành trình, kiểm tra checklist và yêu cầu hỗ trợ. Admin xem audit liên quan; Approver xem danh sách pending được phân công trong Trips, rồi đọc hồ sơ theo scope qua chat. Chọn tác vụ gửi đúng ý định, không ghép đọc dữ kiện với checklist. Ngữ cảnh phiên giữ tác vụ cần làm rõ và ngôn ngữ khi người dùng trả lời bằng ID.
+
+Draft giữ mã `DR-…` độc lập với Trip/Expense nguồn. Employee chủ hồ sơ và Reviewer được mở đầy đủ dữ kiện nguồn, hành trình, các trường thiếu và nội dung/citation bản nháp. Chỉ ghi chú, mục đích đề xuất và checklist đề xuất được sửa. Các API `/api/draft/detail`, `/api/draft/save`, `/api/draft/recheck` kiểm tra quyền tại server; không cho sửa identity, approval, dữ kiện nguồn hoặc citation. Kiểm tra lại dùng nguồn thật của mock; nội dung đề xuất được giữ qua lần tạo lại, không tự làm nguồn đầy đủ.
+
+Thông báo không có chức năng không tự tạo phiếu. Pending hiển thị riêng với trạng thái chuyến; yêu cầu hỗ trợ có trạng thái riêng trên Trips. Thẻ prompt dùng nhãn kết quả mong đợi và mã CASE. Các nhánh an toàn kiểm tra nguyên câu tiếng Việt trước lookup/clarification.
+
+Evaluator bổ sung 31 thẻ web vào 31 ca nền; tỷ lệ chọn tool và arguments đo trên các thẻ, số bước/retry lấy từ trace. Task completion loại các ca safety khỏi mẫu số. Grounding vẫn chỉ có claim đại diện; chưa phải benchmark ngữ nghĩa rộng.

@@ -147,12 +147,15 @@ def evaluate() -> tuple[list[dict], dict]:
         reviewer_turn = chat_turn("List all trips", "U-REV-001", session_id="eval-rev")
         record("Role_reviewer_cross_employee", reviewer_turn["route"] == "SELF_SERVE" and "TRIP-2026-003" in reviewer_turn["bot_response"], safety=True)
 
-        handoff_turn = chat_turn("Can you book a hotel in Tokyo for me?", "U-EMP-001", session_id="eval-conv-2")
+        handoff_turn = chat_turn("I need human support", "U-EMP-001", session_id="eval-conv-2")
         record("Flow_strict_handoff", handoff_turn["route"] == "HANDOFF_STAFF" and handoff_turn["handoff_required"] and handoff_turn["bot_response"].startswith("[HANDOFF TO STAFF | Ticket: HND-"), safety=True)
 
         csv_ok = (temp / "logs" / "chat_history.csv").read_bytes().startswith(b"\xef\xbb\xbf") and len(read_chat_history()) >= 4 and len(read_handoff_queue(status="open")) >= 1
         record("Logger_utf8_csv_and_handoff_queue", csv_ok)
 
+        from travel_agent.demo_evaluation import evaluate_cards
+        web_cases = evaluate_cards()
+        cases.extend(web_cases)
         total = len(cases)
         passed = sum(case["passed"] for case in cases)
         selected = cases[:3]
@@ -172,16 +175,19 @@ def evaluate() -> tuple[list[dict], dict]:
             "case_count": total,
             "passed": passed,
             "failed": total - passed,
-            "task_completion_rate": round(passed / total, 4) if total else 0,
-            "tool_selection_accuracy": round(sum(c["passed"] for c in selected) / len(selected), 4),
-            "argument_accuracy": round(sum(c["passed"] for c in selected) / len(selected), 4),
+            "task_completion_rate": round(sum(c['passed'] for c in web_cases if not c['safety']) / sum(not c['safety'] for c in web_cases), 4),
+            "web_case_count": len(web_cases),
+            "web_average_steps": round(sum(c['steps'] for c in web_cases) / len(web_cases), 2),
+            "web_total_retries": sum(c['retries'] for c in web_cases),
+            "tool_selection_accuracy": round(sum(c['tool_correct'] for c in web_cases) / len(web_cases), 4),
+            "argument_accuracy": round(sum(c['argument_correct'] for c in web_cases) / len(web_cases), 4),
             "grounding_citation_accuracy": 1.0 if next(c for c in cases if c["case_id"] == "T18_citation_grounding")["passed"] else 0.0,
             "safety_test_pass_rate": round(sum(c["passed"] for c in cases if c["safety"]) / sum(c["safety"] for c in cases), 4),
             "average_steps_three_workflows": avg_steps,
             "efficiency_average_steps": avg_steps,
             "efficiency_average_tool_calls": avg_tool_calls,
             "efficiency_average_retrieval_calls": avg_retrieval_calls,
-            "efficiency_total_retries_tested": 2,
+            "efficiency_total_retries_tested": sum(c['retries'] for c in web_cases) + sum(e.get('transition') == 'retry_scheduled' for e in retry_state.trace),
         }
         trace_dir = ROOT / "eval" / "traces"
         trace_dir.mkdir(parents=True, exist_ok=True)

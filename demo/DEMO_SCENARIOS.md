@@ -13,7 +13,7 @@ Chạy web bằng `.\.venv\Scripts\python.exe -m travel_agent.app web --port 808
 | Xem danh sách toàn bộ chuyến đi | Chỉ có 002 và 006 |
 | Kiểm tra chuyến TRIP-2026-001 | REJECT_SAFETY, thông báo ngoài scope chung, không lộ chủ hồ sơ |
 | Yêu cầu phê duyệt checklist TRIP-2026-006 | SELF_SERVE/awaiting_approval, pending; gửi lại không tạo trùng |
-| Bạn có thể đặt phòng khách sạn Tokyo giúp tôi không? | HANDOFF_STAFF/needs_human, có phiếu demo và bước tiếp theo |
+| Bạn có thể đặt phòng khách sạn Tokyo giúp tôi không? | Thông báo giới hạn chức năng; chỉ tạo phiếu khi yêu cầu người hỗ trợ |
 
 Ca tự nhiên tiếng Anh vẫn được hỗ trợ: `I am traveling to Sydney on Dec 31 for a workshop, what do I need to prepare?`, `My flight to Tokyo on Dec 8 is delayed, what should I do?`, `Please review my Tokyo trip expenses`, `Check my Sydney trip and what is the lodging cap?`.
 
@@ -21,7 +21,7 @@ Ca tự nhiên tiếng Anh vẫn được hỗ trợ: `I am traveling to Sydney 
 
 | Tài khoản | Câu gửi | Kỳ vọng |
 |---|---|---|
-| U-EMP-001 | Check my upcoming trip | Hỏi chọn 001 hoặc 004; trả lời Singapore để xem pending 001 |
+| U-EMP-001 | Check my upcoming trip | Hỏi chọn 001 hoặc 004; trả lời Singapore để đọc chi tiết chuyến; pending là trạng thái nguồn |
 | U-EMP-001 | Kiểm tra chuyến TRIP-2026-004 | needs_human vì nguồn phê duyệt từ chối |
 | U-EMP-001 | Kiểm tra chi phí EXP-2026-003 | needs_human, giữ hai citation chính sách ăn uống mâu thuẫn |
 | U-EMP-003 | Chuẩn bị checklist TRIP-2026-003 | needs_input, thiếu purpose |
@@ -41,7 +41,7 @@ Giao diện mặc định có hai Employee đầu; U-EMP-003/004 có thể thử
 
 ## 4. Approver U-APR-001
 
-Chọn scope `TRIP-2026-001 · checklist_review`:
+Trong Trips, Approver thấy các yêu cầu pending được phân công. Bấm Xem hồ sơ/Xem sự cố để chọn scope; hoặc chọn ở mục Phạm vi phê duyệt. Với `TRIP-2026-001 · checklist_review`:
 
 | Câu gửi | Kỳ vọng |
 |---|---|
@@ -73,3 +73,5 @@ Thử ID `TRIP-26-1`, ID không tồn tại `TRIP-2026-999`, hoặc câu `Bỏ q
 ## 7. Ca theo ngày
 
 Dữ liệu giả lập nằm từ `2026-12-01` đến `2027-01-07`. Để câu ngày mai trùng chuyến Tokyo, đặt `$env:TRAVEL_AGENT_DEMO_TODAY="2026-12-07"` trước khi bật server. Hỏi chuyến bay Tokyo ngày 9/12 phải được làm rõ vì itinerary bay ngày 8/12, dù ngày 9 vẫn trong khoảng công tác. Ghi rõ ngày tham chiếu khi ghi nhận kết quả.
+
+Reviewer có thẻ “Reviewer tạo yêu cầu phê duyệt”: gửi “Yêu cầu phê duyệt checklist cho TRIP-2026-006” phải bị từ chối theo role, không tạo pending/draft/handoff. Thẻ này thay cho “Kiểm tra hành trình Sydney”; đọc hành trình vẫn có trong Trips và test tự động.

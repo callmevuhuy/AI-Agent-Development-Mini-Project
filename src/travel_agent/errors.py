@@ -5,7 +5,7 @@ Never include raw exceptions or facts from records the caller cannot read.
 """
 
 ERROR_MESSAGES = {
-    "unauthorized_scope": "Dữ liệu được yêu cầu nằm ngoài phạm vi truy cập của bạn. Hãy kiểm tra lại mã dữ liệu hoặc phạm vi được cấp.",
+    "unauthorized_scope": "Bạn không có quyền truy cập dữ liệu hoặc thực hiện thao tác này. Hãy kiểm tra phạm vi được cấp.",
     "invalid_argument": "Thông tin đầu vào không hợp lệ. Hãy kiểm tra mã chuyến đi (TRIP-YYYY-NNN), mã báo cáo (EXP-YYYY-NNN) và các trường bắt buộc.",
     "not_found": "Không tìm thấy bản ghi trong dữ liệu demo. Hãy kiểm tra lại mã chuyến đi hoặc báo cáo.",
     "not_allowed": "Thao tác này không được phép trong quy trình hiện tại. Hãy chọn chức năng phù hợp với vai trò của bạn.",

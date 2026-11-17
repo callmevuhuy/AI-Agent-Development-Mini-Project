@@ -74,3 +74,13 @@ Lọc `allowed_roles` trước BM25, kiểm tra phiên bản và tạo citation.
 - `CLARIFY`: thiếu ID, ngày không khớp, nhiều hồ sơ phù hợp hoặc thiếu trường/chứng từ.
 - `HANDOFF_STAFF`: cần người xem xét; mẫu cố định `[HANDOFF TO STAFF | Ticket: HND-...]`, chỉ có facts và citation đã xác minh; ghi hàng đợi demo.
 - `REJECT_SAFETY`: injection, ID sai, ngoài scope hoặc thao tác bị cấm theo role. Phản hồi scope dùng chung; lỗi role mô tả đúng thao tác. Không kèm câu nhắc thừa về việc agent chưa thực hiện.
+
+## Cập nhật workspace và phản hồi
+
+Trips có bốn tác vụ riêng: xem chi tiết, xem hành trình, kiểm tra checklist và yêu cầu hỗ trợ. Admin xem audit liên quan; Approver xem danh sách pending được phân công trong Trips, rồi đọc hồ sơ theo scope qua chat. Chọn tác vụ gửi đúng ý định, không ghép đọc dữ kiện với checklist. Ngữ cảnh phiên giữ tác vụ cần làm rõ và ngôn ngữ khi người dùng trả lời bằng ID.
+
+Draft giữ mã `DR-…` độc lập với Trip/Expense nguồn. Employee chủ hồ sơ và Reviewer được mở đầy đủ dữ kiện nguồn, hành trình, các trường thiếu và nội dung/citation bản nháp. Chỉ ghi chú, mục đích đề xuất và checklist đề xuất được sửa. Các API `/api/draft/detail`, `/api/draft/save`, `/api/draft/recheck` kiểm tra quyền tại server; không cho sửa identity, approval, dữ kiện nguồn hoặc citation. Kiểm tra lại dùng nguồn thật của mock; nội dung đề xuất được giữ qua lần tạo lại, không tự làm nguồn đầy đủ.
+
+Thông báo không có chức năng không tự tạo phiếu. Pending hiển thị riêng với trạng thái chuyến; yêu cầu hỗ trợ có trạng thái riêng trên Trips. Thẻ prompt dùng nhãn kết quả mong đợi và mã CASE. Các nhánh an toàn kiểm tra nguyên câu tiếng Việt trước lookup/clarification.
+
+Evaluator bổ sung 31 thẻ web vào 31 ca nền; tỷ lệ chọn tool và arguments đo trên các thẻ, số bước/retry lấy từ trace. Task completion loại các ca safety khỏi mẫu số. Grounding vẫn chỉ có claim đại diện; chưa phải benchmark ngữ nghĩa rộng.

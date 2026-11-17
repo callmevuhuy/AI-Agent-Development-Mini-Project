@@ -9,6 +9,22 @@ from ._storage import find_record, load_dataset, write_dataset
 _REQUEST_LOCK = Lock()
 _AUDIT_LOCK = Lock()
 
+APPROVAL_ACTIONS = {"checklist_review": "Xem xét checklist", "escalation": "Xem xét hỗ trợ sự cố", "publish_request": "Xem xét đề nghị phát hành"}
+
+
+def list_assigned_pending_requests(user_id: str) -> list[dict[str, Any]]:
+    """Application discovery exposes assignment metadata, never unrestricted trip facts."""
+    from .user import get_user
+    user = get_user(user_id)
+    if not user or user.get("role") != "Approver":
+        return []
+    return [{"trip_id": r["trip_id"], "action_type": r["action_type"],
+             "action_label": APPROVAL_ACTIONS[r["action_type"]], "status": "pending",
+             "assigned_approver_id": user_id}
+            for r in load_dataset("approval_requests.json")
+            if r.get("assigned_approver_id") == user_id and r.get("status") == "pending"
+            and r.get("action_type") in APPROVAL_ACTIONS]
+
 
 def get_trip_approval_status(trip_id: str) -> dict[str, Any] | None:
     return find_record("approvals.json", "trip_id", trip_id)
@@ -35,6 +51,7 @@ def _create_approval_request(trip_id: str, action_type: str, action_summary: str
         "request_id": f"APR-{uuid4().hex[:12]}", "trip_id": trip_id,
         "action_type": action_type, "action_summary": action_summary,
         "status": "pending", "created_by": actor_id, "run_id": run_id,
+        "assigned_approver_id": "U-APR-001",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     rows.append(row)
@@ -76,7 +93,8 @@ def _record_external_decision(
     from .user import get_user
     actor = get_user(actor_id)
     request = get_approval_request(trip_id, action_type)
-    if not actor or actor.get("role") != "Approver" or not request or request.get("status") != "pending":
+    if (not actor or actor.get("role") != "Approver" or not request
+            or request.get("status") != "pending" or request.get("assigned_approver_id") != actor_id):
         raise ValueError("Only an application-authorized mock Approver can decide a pending request")
     event = {
         "event_id": f"EVT-{uuid4().hex[:12]}", "event_type": "approval_decision",

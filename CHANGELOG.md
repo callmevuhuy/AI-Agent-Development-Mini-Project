@@ -1,5 +1,21 @@
 # Nhật ký thay đổi
 
+## 2026-11-17 — Phân công Approver và testcase Reviewer
+
+- Thay thẻ hành trình Sydney bằng ca Reviewer yêu cầu tạo pending, phải bị từ chối theo role.
+- Bổ sung assigned_approver_id vào hai seed và pending mới; danh sách Trips chỉ trả metadata các yêu cầu pending được phân công. Chọn dòng đặt scope phù hợp cho lần đọc; server xác minh lại, không cấp quyền chỉ từ dropdown.
+- Kiểm tra phân công khi đọc facts/policy và trong helper quyết định mô phỏng. Scope hết hiệu lực khi đổi người hoặc resolved; không có dữ liệu hiển thị danh sách rỗng, không handoff.
+- Thông báo thiếu quyền tách khỏi giới hạn chức năng. Bổ sung test sai người, giả scope, thiếu phân công, scope cũ, API, danh sách rỗng và frontend chọn dòng.
+
+
+## 2026-11-17 — Workspace và hồi quy prompt web
+
+- Tách đọc chuyến/hành trình khỏi checklist; làm rõ nhiều lượt giữ ý định/ngôn ngữ; câu hỏi hạn mức trả đủ số và citation.
+- Chặn câu injection tiếng Việt ngay đầu; giới hạn chức năng không tự handoff; pending không tạo ticket thừa.
+- Trips có menu tác vụ theo role và trạng thái hỗ trợ riêng. Draft có mã độc lập, xem đầy đủ nguồn/trường thiếu, chỉnh đề xuất theo whitelist và kiểm tra lại từ nguồn.
+- Cập nhật toàn bộ nhãn thẻ theo phản hồi mong đợi, sửa ID/mô tả sai. Evaluator có thêm 31 ca web; test chỉnh draft kiểm tra quyền và không sửa dữ liệu nguồn.
+
+
 Lịch sử theo hạng mục. Ngày chỉ ghi khi có bằng chứng; các số test ở từng mốc là lịch sử. Xem báo cáo hiện tại để xác định trạng thái mới nhất.
 
 ## 2026-11-17 — Rà soát role, phản hồi và tài liệu tiếng Việt

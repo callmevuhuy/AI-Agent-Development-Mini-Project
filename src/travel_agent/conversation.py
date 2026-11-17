@@ -301,11 +301,11 @@ def _format_handoff_response(
         "",
         f"Lý do chuyển tiếp (Reason): {reason}" if is_vi else f"Reason: {reason}",
     ]
-    detail_lines = _trip_details_block(result or {}, is_vi=is_vi)
+    detail_lines = _trip_details_block(result or {}, is_vi=is_vi) if output_format == "detailed" else []
     if detail_lines:
         lines.append("")
         lines.extend(detail_lines)
-    if facts_summary:
+    if facts_summary and output_format == "detailed":
         lines.extend(["", f"Tóm tắt dữ kiện xác thực (Verified Summary): {facts_summary}" if is_vi else f"Verified Summary: {facts_summary}"])
     ev_lines = _format_evidence_lines(result or {}, max_items=3 if output_format == "concise" else None)
     if ev_lines:
@@ -345,7 +345,7 @@ def _format_workflow_success(
 
     lines = [f"[{workflow.upper()} | COMPLETED]", msg]
 
-    detail_lines = _trip_details_block(result, is_vi=is_vi)
+    detail_lines = _trip_details_block(result, is_vi=is_vi) if output_format == "detailed" else []
     if detail_lines:
         lines.append("")
         lines.extend(detail_lines)
@@ -387,7 +387,7 @@ def _format_clarify_workflow(workflow: str, result: dict[str, Any], output_forma
     msg = "Cần bổ sung thêm thông tin." if is_vi else "More information is required."
     lines = [f"[{workflow.upper()} | NEEDS INPUT]", result.get("message", msg)]
 
-    detail_lines = _trip_details_block(result, is_vi=is_vi)
+    detail_lines = _trip_details_block(result, is_vi=is_vi) if output_format == "detailed" else []
     if detail_lines:
         lines.append("")
         lines.extend(detail_lines)
@@ -639,6 +639,8 @@ def _resolve_with_session(decision: RouteDecision, user_context: dict[str, Any],
     if user_context["role"] not in {"Employee", "Reviewer", "Approver"}:
         return decision
     session = get_session_state(user_context)
+    if decision.intent == "clarify_id" and session.get("pending_intent"):
+        return RouteDecision("SELF_SERVE", session["pending_intent"], trip_id=decision.trip_id, destination=decision.destination)
     if decision.intent == "clarify_id":
         last_wf = session.get("last_workflow")
         wf = last_wf if last_wf in {"pretrip", "intrip", "posttrip"} else "pretrip"
@@ -784,11 +786,11 @@ def _handle_approver_turn(
         return "REJECT_SAFETY", "failed_validation", "", [], "", state
     if not isinstance(approval_scope, dict) or not approval_scope.get("trip_id") or not approval_scope.get("action_type"):
         state = RunState("pretrip", user_context, phase="approver_scope_missing")
-        state.finish("needs_human")
+        state.finish("failed_validation")
         err = "Tài khoản Approver yêu cầu phạm vi phê duyệt đang chờ xử lý từ ứng dụng." if is_vi else "Approver accounts require an application-supplied pending approval scope."
         return (
-            "HANDOFF_STAFF",
-            "needs_human",
+            "REJECT_SAFETY",
+            "failed_validation",
             "",
             [],
             err,
@@ -797,7 +799,7 @@ def _handle_approver_turn(
     scoped_ctx = {**user_context, "approval_scope": approval_scope}
     trip_id = decision.trip_id or approval_scope["trip_id"]
     action_type = approval_scope["action_type"]
-    wf = "intrip" if action_type == "escalation" or decision.intent == "intrip" else "pretrip"
+    wf = "intrip" if action_type == "escalation" or decision.intent in {"intrip", "itinerary_read"} else "pretrip"
     state = RunState(wf, scoped_ctx, phase="approver_scoped_review")
 
     if decision.intent == "policy_qa":
@@ -820,7 +822,7 @@ def _handle_approver_turn(
         text, cits = _format_policy_qa(res["data"], "detailed", is_vi=is_vi)
         return "SELF_SERVE", "completed", text, cits, "", state
 
-    read_tool = "get_itinerary" if action_type == "escalation" or decision.intent == "intrip" else "get_trip_request"
+    read_tool = "get_itinerary" if action_type == "escalation" or decision.intent in {"intrip", "itinerary_read"} else "get_trip_request"
     res = run_tool(state, read_tool, {"trip_id": trip_id})
     if not res.get("ok"):
         state.finish("failed_validation")
@@ -916,6 +918,11 @@ def handle_turn(
         output_format = get_preferences(user_context).get("preferred_output_format", "concise")
 
     is_vi = _is_vietnamese(message, user_context)
+    if user["role"] != "Admin":
+        if re.fullmatch(r"(?:TRIP|EXP)-\d{4}-\d{3}", message.strip(), re.I):
+            is_vi = get_session_state(user_context).get("session_language", "en") == "vi"
+        elif route_message_intent(message).route != "REJECT_SAFETY":
+            set_session_value(user_context, "session_language", "vi" if is_vi else "en")
 
     decision = _resolve_with_session(route_message_intent(message), user_context, message)
 
@@ -1021,6 +1028,38 @@ def handle_turn(
                 else "Please provide the trip ID (TRIP-YYYY-NNN), destination, or travel date so I can assist you."
             )
         _audit_chat_event(user, state, None, None, "clarification_requested")
+
+    elif route == "SELF_SERVE" and intent in {"trip_details", "itinerary_read"}:
+        wf = "intrip" if intent == "itinerary_read" else "pretrip"
+        trip_id, _, clarification = _resolve_natural_record(decision, wf, user_context, is_vi=is_vi)
+        state = RunState(wf, user_context, phase="read_details")
+        if clarification:
+            route, outcome = "CLARIFY", "needs_input"
+            state.finish(outcome)
+            set_session_value(user_context, "pending_intent", intent)
+            bot_response = clarification
+        else:
+            res = run_tool(state, "get_itinerary" if intent == "itinerary_read" else "get_trip_request", {"trip_id": trip_id})
+            approval = run_tool(state, "get_approval_status", {"trip_id": trip_id}) if res["ok"] and intent == "trip_details" else None
+            outcome = "completed" if res["ok"] else "failed_validation"
+            state.finish(outcome)
+            record_id = trip_id
+            delete_session_value(user_context, "pending_intent")
+            if res["ok"]:
+                result_payload = {"trip": res["data"]} if intent == "trip_details" else {"flight_facts": res["data"].get("flight"), "hotel": res["data"].get("hotel")}
+                bot_response = "\n".join(_trip_details_block(result_payload, is_vi=is_vi))
+                if approval and approval.get('ok'):
+                    result_payload['approval'] = approval['data']
+                    bot_response += "\nTrạng thái phê duyệt: " + str(approval['data'].get('trip_approval_status', 'Chưa có'))
+            else:
+                route = "REJECT_SAFETY"
+                result_payload = {"error": res["error"]}
+
+    elif route == "SELF_SERVE" and intent == "out_of_scope":
+        state = RunState("pretrip", user_context, phase="capability_limit")
+        outcome = "needs_input"
+        state.finish(outcome)
+        bot_response = "Agent không hỗ trợ thực hiện yêu cầu này. Bạn có thể tra chính sách, xem thông tin chuyến hoặc yêu cầu chuyển Travel Operations hỗ trợ."
 
     elif route == "SELF_SERVE" and intent == "request_approval":
         workflow_name = "request_approval"
@@ -1223,6 +1262,8 @@ def handle_turn(
                     if is_vi
                     else "Request denied: the requested record is outside your authorized scope."
                 )
+            elif outcome == "awaiting_approval":
+                bot_response = "Chuyến đi đang chờ phê duyệt.\n" + "\n".join(_trip_details_block(result_payload, is_vi=is_vi))
             elif outcome == "completed" and not policy_handoff_reason:
                 bot_response = _format_workflow_success(wf, result_payload, citations, output_format, policy_note=policy_note, is_vi=is_vi)
             elif outcome == "needs_input":
@@ -1286,6 +1327,8 @@ def handle_turn(
             code, detail = "unauthorized_scope", role_error("Approver", action)["error"]["message"]
         elif state.phase == "approval_decision_boundary":
             code, detail = "unauthorized_scope", role_error(user["role"], "approval_decision")["error"]["message"]
+        elif state.phase == "approver_scope_missing":
+            code, detail = "unauthorized_scope", "Bạn chưa chọn yêu cầu được phân công. Hãy chọn một yêu cầu pending trong Trips hoặc mục Phạm vi phê duyệt."
         else:
             code = result_payload.get("error_code", "invalid_argument")
             detail = ERROR_MESSAGES.get(code, ERROR_MESSAGES["unavailable"])

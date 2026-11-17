@@ -5,7 +5,7 @@
 | Loại | Phạm vi | Nội dung | Nơi lưu |
 |---|---|---|---|
 | Trạng thái lượt | `run_id` | Số bước, trace, kết quả cuối | RAM; evaluator xuất trace mẫu |
-| Ngữ cảnh phiên | `user_id` + `session_id` | `active_trip_id`, `active_report_id`, `last_workflow`, `pending_slot` | JSON trong `data/memory/sessions/` |
+| Ngữ cảnh phiên | `user_id` + `session_id` | `active_trip_id`, `active_report_id`, `last_workflow`, `pending_slot`, `pending_intent`, `session_language` | JSON trong `data/memory/sessions/` |
 | Tùy chọn dài hạn | `user_id` | `response_language`, `preferred_output_format` | JSON trong `data/memory/preferences/` |
 
 Session có TTL mặc định 1.800 giây, được gia hạn khi ghi. Khi đọc thấy hết hạn, file bị xóa và trả trạng thái rỗng; chưa có tiến trình nền dọn file. Preferences không tự hết hạn. Đóng trình duyệt không xóa memory trên đĩa.
@@ -30,11 +30,11 @@ Application tra `user_id`, `role`, `traveler_id` từ `users.json`, gắn `sessi
 | Tạo draft nghiệp vụ | Của mình | Mọi hồ sơ được cấp | Không | Không |
 | Tạo yêu cầu pending | Của mình | Không | Không | Không |
 | Session và preferences | Của mình | Của mình | Của mình | Không |
-| Danh sách chuyến | Của mình | Tất cả | Không | Tất cả, chỉ đọc |
+| Danh sách chuyến | Của mình | Tất cả | Metadata yêu cầu pending được phân công | Tất cả, chỉ đọc |
 | Audit | Không | Không | Không | Có |
 | RAG | Chunk được cấp | Chunk được cấp | Theo action và scope pending | Không |
 
-Approver `U-APR-001` chưa có bảng phân công cá nhân; dispatcher kiểm tra lại scope có bản ghi pending trước mỗi tool call. `checklist_review` đọc trip/approval và tra approval/travel/visa/insurance; `escalation` đọc itinerary và tra travel; `publish_request` đọc trip/approval và tra approval. Không có tool list mọi yêu cầu hoặc approve/reject.
+Yêu cầu có `assigned_approver_id`; dispatcher kiểm tra đúng người được phân công, scope và trạng thái pending trước mỗi tool call. Thiếu trường phân công bị từ chối mặc định. `checklist_review` đọc trip/approval và tra approval/travel/visa/insurance; `escalation` đọc itinerary và tra travel; `publish_request` đọc trip/approval và tra approval. Không có tool list mọi yêu cầu hoặc approve/reject.
 
 ## 4. Phản hồi khi bị từ chối
 

@@ -59,6 +59,8 @@ _DAY_MONTH_DATE = re.compile(
 )
 
 _SAFETY_PATTERNS = [
+    r"\bbo\s+qua\s+(?:(?:cac|tat\s+ca|moi)\s+)?(?:quy\s+tac|quy\s+dinh|bao\s+mat|chi\s+thi|an\s+toan)\b",
+    r"\b(?:phe\s+)?duyet\s+(?:toan\s+bo|tat\s+ca)\s+chi\s+phi\b",
     r"\bignore\s+(?:all\s+)?(?:previous\s+)?(?:rules|instructions|policies|policy)\b",
     r"\bdisregard\s+(?:all\s+)?(?:previous\s+|earlier\s+)?(?:rules|instructions|policies|policy)\b",
     r"\bbypass\s+(?:all\s+)?(?:rules|policy|policies|checks|approval|security)\b",
@@ -344,7 +346,7 @@ def route_message_intent(message: str) -> RouteDecision:
     if not is_policy_question and any(re.search(p, norm) or re.search(p, clean) for p in _FORBIDDEN_COMMAND_PATTERNS):
         ids = extract_record_ids(message)
         return RouteDecision(
-            "HANDOFF_STAFF",
+            "SELF_SERVE",
             "approval_decision" if re.search(r"\b(?:approve|reject|sign\s+off|phe\s+duyet|tu\s+choi)\b", clean) else "out_of_scope",
             trip_id=ids["trip_id"],
             report_id=ids["report_id"],
@@ -374,6 +376,14 @@ def route_message_intent(message: str) -> RouteDecision:
     dest = extract_destination(norm)
     date_hint = extract_date_hint(norm)
 
+    if _has_any(norm, ("han muc", "dinh muc", "cap", "allowance")) and _has_any(norm, ("khach san", "tien phong", "hotel", "lodging")):
+        return RouteDecision("SELF_SERVE", "policy_qa", destination=dest, policy_query="lodging hotel allowance cap per night", policy_category="expense") if not _has_any(norm, ("kiem tra chuyen", "check my", "check trip")) else RouteDecision("SELF_SERVE", "mixed", destination=dest, trip_id=trip_id, policy_query="lodging hotel allowance cap per night", policy_category="expense")
+    if _has_any(norm, ("xem hanh trinh", "xem lich trinh", "view itinerary")):
+        return RouteDecision("SELF_SERVE", "itinerary_read", trip_id=trip_id, destination=dest)
+    if (_has_any(norm, ("xem chi tiet", "thong tin chi tiet", "chuyen di sap toi", "upcoming trip"))
+            and not _has_any(norm, ("checklist", "chuan bi", "prepare"))):
+        return RouteDecision("SELF_SERVE", "trip_details", trip_id=trip_id, destination=dest, date_hint=date_hint)
+
     # 4. Admin / Reviewer overview intents.
     if re.search(r"\b(?:audit\s+(?:log|history|events?)|nhat\s+ky\s+kiem\s+toan|su\s+kien\s+an\s+ninh)\b", clean):
         return RouteDecision("SELF_SERVE", "admin_overview", trip_id=trip_id, report_id=report_id, admin_action="audit")
@@ -383,7 +393,7 @@ def route_message_intent(message: str) -> RouteDecision:
     # 5. Explicit preference commands.
     pref_cmd = detect_preference_command(norm)
     if not pref_cmd:
-        if any(w in clean for w in ("ghi nho", "so thich", "thich tra loi")):
+        if any(w in clean for w in ("ghi nho", "so thich", "thich tra loi", "hay nho", "thich cau tra loi")):
             if "chi tiet" in clean:
                 pref_cmd = {"action": "set", "key": "preferred_output_format", "value": "detailed"}
             elif "ngan gon" in clean:
@@ -455,7 +465,7 @@ def route_message_intent(message: str) -> RouteDecision:
 
     # 11. Ambiguous / out-of-domain -> hand off cleanly without guessing.
     return RouteDecision(
-        route="HANDOFF_STAFF",
+        route="SELF_SERVE",
         intent="out_of_scope",
         destination=dest,
         date_hint=date_hint,

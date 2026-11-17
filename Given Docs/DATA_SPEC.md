@@ -43,7 +43,7 @@ Có ít nhất bốn hành trình với chuyến bay, khách sạn và sự ki�
 
 `approvals.json` giữ trạng thái duyệt chuyến: 001 pending, 002 approved, 004 rejected, 006 approved. Đây là nguồn nghiệp vụ về duyệt chuyến, tool agent không sửa dữ liệu này.
 
-`approval_requests.json` giữ yêu cầu review theo `(trip_id, action_type)`. `request_approval` chỉ tạo pending và trả bản cũ khi gọi lại cùng cặp. Seed có `TRIP-2026-001/checklist_review` và `TRIP-2026-002/escalation`. Scope Approver phải khớp một yêu cầu hiện còn pending; không thay thế trạng thái duyệt chuyến.
+`approval_requests.json` giữ yêu cầu review theo `(trip_id, action_type)`. `request_approval` chỉ tạo pending và trả bản cũ khi gọi lại cùng cặp. Seed có `TRIP-2026-001/checklist_review` và `TRIP-2026-002/escalation`. Cả hai seed được phân công cho U-APR-001 qua assigned_approver_id. Scope Approver phải khớp một yêu cầu pending được phân công cho chính tài khoản; không thay thế trạng thái duyệt chuyến.
 
 `audit_events.json` ghi sự kiện workflow, tạo yêu cầu và quyết định mô phỏng. Tool Admin chỉ đọc; dữ liệu là JSON cục bộ, không phải audit bất biến production. Endpoint reset demo có thể xóa sự kiện runtime, giữ seed. Audit kỹ thuật không chứa nguyên văn hội thoại.
 
