@@ -1,5 +1,12 @@
 """Launch the zero-dependency Travel Ops Agent Web Demo UI."""
 import argparse
+import sys
+from pathlib import Path
+
+# Ensure src/ is on sys.path when running script directly
+SRC_DIR = Path(__file__).resolve().parent.parent / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 from travel_agent.web_demo import serve
 

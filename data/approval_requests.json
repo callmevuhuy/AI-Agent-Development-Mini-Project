@@ -8,15 +8,5 @@
     "trip_id": "TRIP-2026-002",
     "action_type": "escalation",
     "status": "pending"
-  },
-  {
-    "request_id": "APR-fd5b009d4ec4",
-    "trip_id": "TRIP-2026-001",
-    "action_type": "escalation",
-    "action_summary": "Please review my flight disruption",
-    "status": "pending",
-    "created_by": "U-EMP-001",
-    "run_id": "2f98e327-a47d-41d1-94e4-c3ce667bd1ba",
-    "created_at": "2026-11-16T23:45:58.009727+00:00"
   }
 ]
