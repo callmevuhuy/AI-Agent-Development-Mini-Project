@@ -13,7 +13,7 @@ EXPECTED_ROUTES = {
 }
 EXPECTED_TOOLS = {
     'U-EMP-002': ['get_itinerary','create_travel_checklist_draft','calculate_expense_summary','search_travel_policy','request_approval','set_preference',None,None,None,'get_trip_request'],
-    'U-EMP-001': ['create_travel_checklist_draft',None,'get_trip_request','calculate_expense_summary',None,'search_travel_policy'],
+    'U-EMP-001': ['validate_trip_requirements',None,'get_trip_request','calculate_expense_summary',None,'search_travel_policy'],
     'U-REV-001': ['list_my_trips','calculate_expense_summary','get_trip_request',None,'search_travel_policy'],
     'U-APR-001': ['get_trip_request','get_itinerary','search_travel_policy','get_trip_request','search_travel_policy'],
     'U-ADM-001': ['admin_list_trips','admin_get_audit_history','admin_get_audit_history',None,None],

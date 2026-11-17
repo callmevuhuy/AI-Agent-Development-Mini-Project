@@ -182,6 +182,10 @@ def run_pretrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
     else:
         outcome, message = "completed", "The read-only pre-trip checklist preview is ready."
 
+    # Mục 11.2: pending chỉ trả preview, không ghi artifact khi chưa được duyệt.
+    if approval_status == "pending":
+        return _stop(state, outcome, message, trip=trip, checklist=checklist, validation=validation)
+
     # Bước 6 (Mục 8.1): Tạo bản ghi checklist nháp mang tính idempotent trong sandbox
     state.set_phase("pretrip_draft")
     draft_result = run_tool(state, "create_travel_checklist_draft", {

@@ -1,5 +1,7 @@
 # Trợ lý điều hành công tác doanh nghiệp
 
+Kịch bản trình bày ba workflow và quyền các role: [Demo cho giáo viên](demo/DEMO_GIAO_VIEN.md).
+
 Nguyên mẫu hỗ trợ chuẩn bị chuyến công tác, xử lý sự cố trong chuyến đi và rà soát chi phí sau chuyến đi. Hệ thống chạy ngoại tuyến với dữ liệu giả lập; định tuyến, phân quyền, tính toán và đánh giá được thực hiện bằng quy tắc xác định.
 
 ## Cài đặt môi trường

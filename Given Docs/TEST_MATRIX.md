@@ -53,6 +53,10 @@ Các ca đọc ngoài scope phải dùng cùng thông báo, không nhắc chủ 
 
 ## 4. Lệnh chạy
 
+Bổ sung ngày 2026-11-18: `tests/test_requirement_gaps.py` có 19 ca kiểm tra approval pending/rejected không lưu checklist; dispatcher chặn trước handler; observation sai hợp đồng; query/top-k vượt giới hạn; lỗi lưu draft của cả ba workflow và retry không trùng; không có policy đến phản hồi cuối; nguồn itinerary đổi trong cùng phiên; lỗi không retryable; số lượng/metadata/liên kết dataset tối thiểu. Các test dùng dữ liệu tạm. Kịch bản thủ công cho buổi bảo vệ ở `demo/DEMO_GIAO_VIEN.md`.
+
+Đây là coverage của prototype theo dữ liệu và quy tắc hiện có, không phải kiểm chứng mọi cách diễn đạt hoặc bảo đảm production. Kiểm tra cấu trúc output hiện ở mức hợp đồng cơ bản, không thay kiểm tra ngữ nghĩa từng field của mọi tool.
+
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -v --basetemp .venv/pytest-tmp
 .\.venv\Scripts\python.exe -m pytest tests -v -k "role or permission or scope" --basetemp .venv/pytest-tmp

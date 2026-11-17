@@ -1,5 +1,12 @@
 # Nhật ký thay đổi
 
+## 2026-11-18 — Bổ sung kiểm thử requirement và kịch bản bảo vệ
+
+- Thêm 19 ca kiểm tra sâu về dispatcher, output, lỗi lưu draft, idempotency ba workflow, thiếu policy, nguồn mới và dataset.
+- Pending approval chỉ trả checklist preview, không ghi artifact theo mục 11.2. Sửa kỳ vọng chọn tool của thẻ pending từ tạo draft sang validation.
+- Thêm kịch bản demo giáo viên gồm 12 bước chính và các ca tùy chọn.
+- Kiểm chứng: 169 pytest đạt, 62/62 ca evaluator đạt; kỳ vọng chọn tool đã cập nhật theo approval gate.
+
 ## 2026-11-18 — Đồng bộ quyền giữa Trips và chat
 
 - Bỏ tự đổi scope khi bấm dòng Trips; chỉ bật nút trùng cả chuyến và loại yêu cầu với scope đang chọn.

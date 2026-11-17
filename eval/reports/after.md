@@ -11,7 +11,7 @@
 | failed | 0 |
 | task_completion_rate | 1.0 |
 | web_case_count | 31 |
-| web_average_steps | 1.84 |
+| web_average_steps | 1.81 |
 | web_total_retries | 0 |
 | tool_selection_accuracy | 1.0 |
 | argument_accuracy | 1.0 |

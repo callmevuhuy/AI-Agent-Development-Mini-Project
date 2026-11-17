@@ -30,7 +30,7 @@ Allowlist: `get_trip_request`, `get_approval_status`, `get_traveler_profile`, `l
 4. Chặn sớm chuyến hủy hoặc phê duyệt bị từ chối → `needs_human`.
 5. Tra các danh mục policy bắt buộc theo điểm đến, tối đa 5 kết quả mỗi lần.
 6. Gọi `validate_trip_requirements` với facts và evidence; tạo checklist draft khi đủ điều kiện lưu.
-7. Kết quả: đủ dữ liệu/evidence và nguồn approved → `completed`; pending thật → `awaiting_approval`; thiếu trường → `needs_input`; thiếu căn cứ hoặc xung đột → `needs_human`.
+7. Kết quả: đủ dữ liệu/evidence và nguồn approved → `completed`; pending thật → `awaiting_approval`; thiếu trường → `needs_input`; thiếu căn cứ hoặc xung đột → `needs_human`. Pending chỉ trả preview, không lưu checklist draft; rejected/cancelled dừng trước bước ghi.
 
 Không khẳng định đã duyệt nếu nguồn chưa trả approved. Lỗi lookup phụ đã được workflow xử lý không được ghi đè lý do dừng nghiệp vụ.
 
