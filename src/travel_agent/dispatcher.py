@@ -1,3 +1,4 @@
+import inspect
 import json
 from typing import Any
 
@@ -31,42 +32,59 @@ _ADMIN_TOOLS = {"admin_list_trips", "admin_get_audit_history"}
 _RAG_ROLES = {"Employee", "Reviewer", "Approver"}
 
 
+# Trả về lỗi khi yêu cầu vượt ngoài phạm vi ủy quyền của người dùng
 def _scope_error() -> dict[str, Any]:
     return failure("unauthorized_scope", "The requested resource is outside this user's scope.")
 
 
-# Dispatcher Authorization (Mục 12): Kiểm tra ủy quyền truy xuất dữ liệu theo đúng vai trò và phạm vi người dùng.
+# Dispatcher Authorization (Mục 12): Kiểm tra ủy quyền truy xuất dữ liệu theo đúng vai trò và phạm vi người dùng
 def _authorize(
     tool_name: str, arguments: dict[str, Any], user_context: dict[str, Any]
 ) -> dict[str, Any] | None:
     user_id = user_context.get("user_id")
     user = get_user(user_id) if isinstance(user_id, str) else None
-    if (
-        not user
-        or user_context.get("role") != user["role"]
-        or not isinstance(user_context.get("session_id"), str)
-        or not user_context["session_id"]
-    ):
+    
+    # Tài khoản user_id phải tồn tại trong mock database
+    if not user:
+        return _scope_error()
+    # Vai trò trong ngữ cảnh phải trùng khớp với hồ sơ lưu trong hệ thống
+    if user_context.get("role") != user["role"]:
+        return _scope_error()
+    # Bắt buộc phải có session_id dạng chuỗi không rỗng
+    if not isinstance(user_context.get("session_id"), str) or not user_context["session_id"]:
         return _scope_error()
 
     role = user["role"]
+    
+    # Admin chỉ được phép gọi các công cụ quản trị hệ thống (_ADMIN_TOOLS)
     if role == "Admin":
         return None if tool_name in _ADMIN_TOOLS else _scope_error()
+        
+    # Cấm các vai trò không phải Admin gọi công cụ quản trị
     if tool_name in _ADMIN_TOOLS:
         return _scope_error()
+        
+    # Chỉ duy nhất nhân viên (Employee) mới được phép gửi yêu cầu phê duyệt chuyến đi
     if tool_name == "request_approval" and role != "Employee":
         return _scope_error()
+        
+    # Nhân viên chỉ được nộp phê duyệt cho chuyến đi thuộc sở hữu của chính mình
     if tool_name == "request_approval":
         trip = get_trip_request(arguments.get("trip_id", ""))
         if not trip or trip.get("traveler_id") != user.get("traveler_id"):
             return _scope_error()
+            
+    # Thao tác ghi/xóa tùy chọn bộ nhớ bắt buộc phải có sự đồng thuận từ ứng dụng
     if tool_name in _MEMORY_TOOLS:
         if tool_name in {"set_preference", "delete_preference"} and user_context.get("memory_write_authorized") is not True:
             return failure("not_allowed", "Persistent preference changes require an explicit user request.")
         return None
+        
+    # Tra cứu chính sách chỉ cho phép các vai trò trong _RAG_ROLES
     if tool_name == "search_travel_policy":
         if role not in _RAG_ROLES:
             return _scope_error()
+        # Approver chỉ được tra cứu danh mục chính sách được cấp phép trong approval_scope
         if role == "Approver":
             scope = user_context.get("approval_scope")
             category = arguments.get("category")
@@ -77,12 +95,17 @@ def _authorize(
                 or category not in _APPROVER_RAG_CATEGORIES[scope["action_type"]]
             ):
                 return _scope_error()
+            # Yêu cầu phê duyệt tương ứng phải đang ở trạng thái chờ xử lý (pending)
             request = get_approval_request(scope["trip_id"], scope["action_type"])
             if not request or request.get("status") != "pending":
                 return _scope_error()
         return None
+        
+    # Reviewer có toàn quyền đọc và kiểm toán dữ liệu công tác toàn công ty
     if role == "Reviewer":
         return None
+        
+    # Approver chỉ được gọi các công cụ đọc chuyến đi nằm trong phạm vi phê duyệt đang chờ
     if role == "Approver":
         scope = user_context.get("approval_scope")
         if (
@@ -95,32 +118,47 @@ def _authorize(
             or tool_name not in _APPROVER_READS[scope["action_type"]]
         ):
             return _scope_error()
+        # Yêu cầu phê duyệt phải đang ở trạng thái pending
         request = get_approval_request(scope["trip_id"], scope["action_type"])
         if not request or request.get("status") != "pending":
             return _scope_error()
         return None
+        
+    # Từ chối nếu vai trò không phải là Employee
     if role != "Employee":
         return _scope_error()
 
+    # Kiểm tra ranh giới cách ly dữ liệu cá nhân theo traveler_id của Employee
     traveler_id = user.get("traveler_id")
+    
+    # Từ chối nếu chuyến đi không thuộc sở hữu của nhân viên đang đăng nhập
     if tool_name in _TRIP_TOOLS or tool_name in _TRIP_DRAFT_TOOLS or tool_name in {"validate_trip_requirements", "request_approval"}:
         trip_id = arguments.get("trip_id") or arguments.get("trip_facts", {}).get("trip_id")
         trip = get_trip_request(trip_id) if trip_id else None
         if trip is not None and trip["traveler_id"] != traveler_id:
             return _scope_error()
+            
+    # Từ chối nếu báo cáo chi phí thuộc về nhân viên khác
     elif tool_name in _EXPENSE_TOOLS or tool_name in _EXPENSE_DRAFT_TOOLS:
         report = get_expense_report(arguments["report_id"])
         if report is not None and report["traveler_id"] != traveler_id:
             return _scope_error()
+            
+    # Từ chối nếu xem hồ sơ của nhân viên khác
     elif tool_name == "get_traveler_profile" and arguments["traveler_id"] != traveler_id:
         return _scope_error()
+        
+    # Đủ điều kiện ủy quyền -> Cho phép thực thi công cụ
     return None
 
 
-# Function Calling (Mục 7.3): Kiểm định cấu trúc kết quả trả về tuân thủ đúng hợp đồng {ok, data, meta} hoặc error.
+# Function Calling (Mục 7.3): Kiểm định cấu trúc kết quả trả về tuân thủ đúng hợp đồng {ok, data, meta} hoặc error
 def _valid_result(result: Any) -> bool:
+    # Kết quả bắt buộc phải là một dictionary và có trường boolean 'ok'
     if not isinstance(result, dict) or not isinstance(result.get("ok"), bool):
         return False
+        
+    # Trường hợp công cụ thực thi thành công: bắt buộc có 'data' và metadata hợp lệ
     if result["ok"]:
         meta = result.get("meta")
         return (
@@ -129,6 +167,8 @@ def _valid_result(result: Any) -> bool:
             and isinstance(meta.get("source"), str)
             and isinstance(meta.get("read_only"), bool)
         )
+        
+    # Trường hợp công cụ gặp lỗi: bắt buộc có object 'error' chứa thông tin lỗi chuẩn
     error = result.get("error")
     return (
         isinstance(error, dict)
@@ -138,7 +178,7 @@ def _valid_result(result: Any) -> bool:
     )
 
 
-# Dispatcher (Mục 7.1, 12): Trung tâm điều phối thực thi tool qua kiểm tra registry, allowlist, schema và ngân sách.
+# Dispatcher (Mục 7.1, 12): Trung tâm điều phối thực thi tool an toàn qua các lớp kiểm soát
 def dispatch(
     tool_name: str,
     arguments: dict[str, Any],
@@ -149,25 +189,40 @@ def dispatch(
     max_steps: int = DEFAULT_MAX_STEPS,
     run_id: str = "direct-dispatch",
 ) -> dict[str, Any]:
+    # Tên tool và tên workflow bắt buộc phải là chuỗi ký tự
     if not isinstance(tool_name, str) or not isinstance(workflow, str):
         return failure("not_allowed", "Tool is not allowed in this workflow.")
+        
+    # Kiểm tra tool đã được đăng ký trong hệ thống
     spec = TOOL_REGISTRY.get(tool_name)
     if spec is None:
         return failure("not_allowed", "Tool is not registered.")
+        
+    # Tool phải thuộc allowlist của workflow hiện tại theo nguyên tắc đặc quyền tối thiểu
     if tool_name not in WORKFLOW_ALLOWLISTS.get(workflow, frozenset()):
         return failure("not_allowed", "Tool is not allowed in this workflow.")
+        
+    # Kiểm định tham số đầu vào bằng JSON Schema chuẩn
     if not isinstance(arguments, dict) or not Draft202012Validator(spec.schema).is_valid(arguments):
         return failure("invalid_argument", "Tool arguments do not match the registered schema.")
+        
+    # Ngữ cảnh người dùng bắt buộc phải là dictionary
     if not isinstance(user_context, dict):
         return _scope_error()
+        
+    # Thực hiện kiểm tra ủy quyền (RBAC & Attribute-based Scope)
     try:
         denied = _authorize(tool_name, arguments, user_context)
     except (OSError, json.JSONDecodeError):
         return failure("unavailable", "Mock authorization data could not be read.", retryable=True)
     except Exception:
         return failure("unavailable", "Mock authorization failed safely.")
+        
+    # Dừng ngay nếu bị từ chối ủy quyền
     if denied:
         return denied
+        
+    # Kiểm tra ngân sách bước gọi công cụ (step budget) còn lại
     if (
         isinstance(steps_used, bool)
         or isinstance(max_steps, bool)
@@ -179,20 +234,33 @@ def dispatch(
         or steps_used >= max_steps
     ):
         return failure("budget_exceeded", "The run has no remaining tool-call budget.")
+        
+    # Tự động phát hiện tham số handler hỗ trợ và thực thi an toàn
     try:
-        if tool_name in _MEMORY_TOOLS or tool_name in {
-            "search_travel_policy", "validate_trip_requirements", "calculate_expense_summary",
-            "list_my_trips", "list_my_expenses",
-        }:
-            result = spec.handler(arguments, user_context=user_context)
-        elif tool_name == "request_approval":
-            result = spec.handler(arguments, user_context=user_context, run_id=run_id)
-        else:
-            result = spec.handler(arguments)
+        params = inspect.signature(spec.handler).parameters
+        kwargs: dict[str, Any] = {}
+        # Bổ sung user_context nếu handler yêu cầu tham số này
+        if "user_context" in params:
+            kwargs["user_context"] = user_context
+        # Bổ sung run_id nếu handler yêu cầu (cho vết kiểm toán và idempotency)
+        if "run_id" in params:
+            kwargs["run_id"] = run_id
+
+        try:
+            result = spec.handler(arguments, **kwargs)
+        except TypeError as ex:
+            # Fallback nếu handler là mock đơn giản chỉ nhận arguments
+            if "unexpected keyword argument" in str(ex):
+                result = spec.handler(arguments)
+            else:
+                raise
     except (OSError, json.JSONDecodeError):
         return failure("unavailable", "Mock data could not be read.", retryable=True)
     except Exception:
         return failure("unavailable", "The mock tool failed safely.")
+        
+    # Kiểm định hợp đồng kết quả đầu ra
     if not _valid_result(result):
         return failure("unavailable", "The mock tool returned an invalid result.")
+        
     return result
