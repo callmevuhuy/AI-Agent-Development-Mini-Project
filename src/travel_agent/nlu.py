@@ -18,15 +18,24 @@ _DESTINATION_ALIASES: dict[str, str] = {
     "singapore": "Singapore",
     "tokyo": "Tokyo",
     "japan": "Tokyo",
+    "nhat ban": "Tokyo",
     "berlin": "Berlin",
     "germany": "Berlin",
+    "duc": "Berlin",
     "london": "London",
     "uk": "London",
     "england": "London",
+    "anh": "London",
     "bangkok": "Bangkok",
     "thailand": "Bangkok",
+    "thai lan": "Bangkok",
     "sydney": "Sydney",
     "australia": "Sydney",
+    "uc": "Sydney",
+    "hanoi": "Hanoi",
+    "ha noi": "Hanoi",
+    "vietnam": "Hanoi",
+    "viet nam": "Hanoi",
 }
 
 _MONTHS: dict[str, int] = {
@@ -58,6 +67,9 @@ _SAFETY_PATTERNS = [
     r"\bapprove\s+all\s+expenses\b",
     r"\bdelete\s+all\b",
     r"\bjailbreak\b",
+    r"\bbo\s+qua\s+(?:tat\s+ca\s+|moi\s+)?(?:quy\s+tac|chi\s+thi|an\s+toan)\b",
+    r"\bduyet\s+tat\s+ca\s+chi\s+phi\b",
+    r"\bxoa\s+tat\s+ca\b",
 ]
 
 _FORBIDDEN_COMMAND_PATTERNS = [
@@ -66,6 +78,8 @@ _FORBIDDEN_COMMAND_PATTERNS = [
     r"\b(?:approve|reject|sign\s+off|pay|refund|reimburse)\s+(?:my\s+|this\s+|the\s+)?(?:trip|expense|report|request|claim)\s*(?:now|immediately|already|for\s+me)?\b",
     r"\bcharge\s+(?:my\s+|the\s+)?(?:card|credit\s+card|account)\b",
     r"\bsend\s+(?:an?\s+)?email\b",
+    r"\b(?:dat|mua|thanh\s+toan)\s+(?:phong|ve|khach\s+san|chuyen\s+bay)\b",
+    r"\bquet\s+the\b",
 ]
 
 _HANDOFF_PATTERNS = [
@@ -74,32 +88,44 @@ _HANDOFF_PATTERNS = [
     r"\b(?:human\s+support|human\s+agent|human\s+staff|live\s+agent|customer\s+support|travel\s+ops\s+staff)\b",
     r"\bescalate\s+(?:to\s+)?(?:staff|manager|human|support)\b",
     r"\bfile\s+(?:a\s+)?complaint\b",
+    r"\b(?:gap\s+nhan\s+vien|gap\s+nhan\s+su|noi\s+chuyen\s+voi\s+con\s+nguoi|can\s+con\s+nguoi|ho\s+tro\s+truc\s+tiep)\b",
+    r"\bleo\s+thang\b",
 ]
 
 _GREETING_PATTERNS = [
-    r"^(?:hi|hello|hey|good\s+(?:morning|afternoon|evening)|greetings)[!.\s]*$",
-    r"^(?:what\s+can\s+you\s+do|help|how\s+do\s+you\s+work)[?!.\s]*$",
+    r"^(?:hi|hello|hey|good\s+(?:morning|afternoon|evening)|greetings|xin\s+chao|chao)[!.\s]*$",
+    r"^(?:what\s+can\s+you\s+do|help|how\s+do\s+you\s+work|giup\s+do|huong\s+dan)[?!.\s]*$",
 ]
 
 _INTRIP_KEYWORDS = (
     "delay", "delayed", "cancel", "cancelled", "canceled", "disruption",
     "stranded", "missed flight", "itinerary", "flight status", "in-trip", "intrip",
+    "tre", "hoan", "gian doan", "cham gio",
 )
 _PRETRIP_KEYWORDS = (
     "prepare", "pre-trip", "pretrip", "checklist", "compliance", "requirement",
     "requirements", "ready", "before departure", "trip status", "approval status",
     "traveling to", "travelling to", "going to", "upcoming trip",
+    "chuan bi", "danh sach kiem tra", "truoc chuyen di", "sap toi",
 )
 _POLICY_TOPIC_NOUNS = (
     "policy", "policies", "rule", "rules", "cap", "limit", "allowance", "visa",
     "insurance", "coverage", "eligible", "eligibility", "meal", "meals", "food",
     "lodging", "hotel", "room", "receipt", "receipts", "rebooking", "disruption",
     "approval", "per day", "per night",
+    "chinh sach", "quy dinh", "han muc", "dinh muc", "phu cap", "an uong", "khach san", "tien phong", "phe duyet",
 )
 _POLICY_QA_HINTS = (
     *_POLICY_TOPIC_NOUNS,
     "allowed", "what is", "what are", "how much", "how many", "can i", "do i need", "should i",
+    "duoc phep", "la bao nhieu", "the nao", "quy dinh gi",
 )
+
+
+def _unaccent(text: str) -> str:
+    """Strip Vietnamese/combining diacritics to basic Latin for fuzzy token matching."""
+    norm = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in norm if not unicodedata.combining(c)).replace("đ", "d").replace("Đ", "D")
 
 
 @dataclass(frozen=True)
@@ -149,15 +175,17 @@ def extract_record_ids(text: str) -> dict[str, str | None]:
 
 
 def extract_destination(norm: str) -> str | None:
-    """Extract a known destination city from a normalized English message."""
+    """Extract a known destination city from a normalized message."""
+    clean = _unaccent(norm)
     for alias, canonical in _DESTINATION_ALIASES.items():
-        if re.search(rf"\b{re.escape(alias)}\b", norm):
+        if re.search(rf"\b{re.escape(alias)}\b", norm) or re.search(rf"\b{re.escape(alias)}\b", clean):
             return canonical
     return None
 
 
 def extract_date_hint(norm: str) -> str | None:
-    """Extract an ISO date from explicit dates (YYYY-MM-DD, DD/MM/YYYY, 'Dec 8') or 'today'/'tomorrow'."""
+    """Extract an ISO date from explicit dates or relative hints."""
+    clean = _unaccent(norm)
     iso = _ISO_DATE.search(norm)
     if iso:
         try:
@@ -189,9 +217,25 @@ def extract_date_hint(norm: str) -> str | None:
             return date(year, month, day).isoformat()
         except ValueError:
             pass
-    if re.search(r"\btomorrow\b", norm):
+    vn_day_month = re.search(r"\b(?:ngay\s+)?(\d{1,2})[/-](\d{1,2})(?:[/-](20\d{2}))?\b", clean)
+    if vn_day_month:
+        day, month = int(vn_day_month.group(1)), int(vn_day_month.group(2))
+        year = int(vn_day_month.group(3)) if vn_day_month.group(3) else (2027 if month == 1 else get_demo_today().year)
+        try:
+            return date(year, month, day).isoformat()
+        except ValueError:
+            pass
+    vn_spelled = re.search(r"\b(?:ngay\s+)?(\d{1,2})\s+thang\s+(\d{1,2})(?:\s+nam\s+(20\d{2}))?\b", clean)
+    if vn_spelled:
+        day, month = int(vn_spelled.group(1)), int(vn_spelled.group(2))
+        year = int(vn_spelled.group(3)) if vn_spelled.group(3) else (2027 if month == 1 else get_demo_today().year)
+        try:
+            return date(year, month, day).isoformat()
+        except ValueError:
+            pass
+    if re.search(r"\b(?:tomorrow|ngay\s+mai)\b", clean):
         return (get_demo_today() + timedelta(days=1)).isoformat()
-    if re.search(r"\btoday\b", norm):
+    if re.search(r"\b(?:today|hom\s+nay)\b", clean):
         return get_demo_today().isoformat()
     return None
 
@@ -235,45 +279,49 @@ def detect_policy_category(norm: str) -> str:
 
 
 def _has_any(norm: str, keywords: tuple[str, ...]) -> bool:
-    return any(re.search(rf"\b{re.escape(kw)}\b", norm) for kw in keywords)
+    clean = _unaccent(norm)
+    return any(re.search(rf"\b{re.escape(kw)}\b", norm) or re.search(rf"\b{re.escape(kw)}\b", clean) for kw in keywords)
 
 
 def _split_clauses(text: str) -> list[str]:
-    parts = re.split(r"[,;?!]+|\b(?:and\s+also|and|also|then|plus)\b", text, flags=re.IGNORECASE)
+    parts = re.split(r"[,;?!]+|\b(?:and\s+also|and|also|then|plus|va|dong\s+thoi)\b", text, flags=re.IGNORECASE)
     return [part.strip() for part in parts if part and part.strip()]
 
 
 def _infer_workflow_intent(norm: str, trip_id: str | None, report_id: str | None, dest: str | None, date_hint: str | None) -> str | None:
-    if report_id or _has_any(norm, ("expense", "expenses", "receipt", "reimburse", "reimbursement", "post-trip", "posttrip")):
+    clean = _unaccent(norm)
+    if report_id or _has_any(norm, ("expense", "expenses", "receipt", "reimburse", "reimbursement", "post-trip", "posttrip", "chi phi", "hoa don", "bao cao chi phi")):
         return "posttrip"
     if _has_any(norm, _INTRIP_KEYWORDS):
         return "intrip"
     if _has_any(norm, _PRETRIP_KEYWORDS):
         return "pretrip"
-    if (trip_id or dest or date_hint) and any(w in norm for w in ("trip", "travel", "flight", "check", "review", "status")):
+    if (trip_id or dest or date_hint) and any(w in clean for w in ("trip", "travel", "flight", "check", "review", "status", "chuyen di", "kiem tra")):
         return "pretrip"
     return None
 
 
 # NLU Routing (Mục 5, 10.1, 12): Phân loại yêu cầu người dùng vào một trong 4 luồng xử lý nghiêm ngặt.
 def route_message_intent(message: str) -> RouteDecision:
-    """Classify an English user message into one of four deterministic routes."""
+    """Classify a user message into one of four deterministic routes."""
     if not isinstance(message, str) or not message.strip():
         return RouteDecision("CLARIFY", "clarify_id", reason="Empty user message.")
     if len(message) > 1000:
         return RouteDecision("REJECT_SAFETY", "safety_adversarial", reason="Message exceeds maximum allowed length.")
 
     norm = normalize_text(message)
+    clean = _unaccent(norm)
 
     # 1. Safety / prompt-injection checks come first.
-    if any(re.search(p, norm) for p in _SAFETY_PATTERNS):
+    if any(re.search(p, norm) or re.search(p, clean) for p in _SAFETY_PATTERNS):
         return RouteDecision("REJECT_SAFETY", "safety_adversarial", reason="Adversarial or rule-bypass phrasing detected.")
 
     # 2. Explicit forbidden-action commands (must hand off, never execute or fabricate).
     is_policy_question = bool(
         re.search(r"\b(?:can\s+i|am\s+i|may\s+i|do\s+i|should\s+i|is\s+it\s+allowed|what\s+is\s+the\s+policy|policy\s+on)\b", norm)
-    )
-    if not is_policy_question and any(re.search(p, norm) for p in _FORBIDDEN_COMMAND_PATTERNS):
+        or re.search(r"\b(?:chinh\s+sach|quy\s+dinh|duoc\s+phep)\b", clean)
+    ) and not bool(re.search(r"\b(?:book|reserve|charge|pay|dat|mua|thanh\s+toan|quet\s+the)\b", clean))
+    if not is_policy_question and any(re.search(p, norm) or re.search(p, clean) for p in _FORBIDDEN_COMMAND_PATTERNS):
         ids = extract_record_ids(message)
         return RouteDecision(
             "HANDOFF_STAFF",
@@ -286,7 +334,7 @@ def route_message_intent(message: str) -> RouteDecision:
         )
 
     # 3. Explicit user request for human staff.
-    if any(re.search(p, norm) for p in _HANDOFF_PATTERNS):
+    if any(re.search(p, norm) or re.search(p, clean) for p in _HANDOFF_PATTERNS):
         ids = extract_record_ids(message)
         return RouteDecision(
             "HANDOFF_STAFF",
@@ -307,18 +355,24 @@ def route_message_intent(message: str) -> RouteDecision:
     date_hint = extract_date_hint(norm)
 
     # 4. Admin / Reviewer overview intents.
-    if re.search(r"\b(?:audit\s+(?:log|history|events?))\b", norm):
+    if re.search(r"\b(?:audit\s+(?:log|history|events?)|nhat\s+ky\s+kiem\s+toan|su\s+kien\s+an\s+ninh)\b", clean):
         return RouteDecision("SELF_SERVE", "admin_overview", trip_id=trip_id, report_id=report_id, admin_action="audit")
-    if re.search(r"\b(?:list|show|view|all)\s+(?:company\s+|employee\s+|all\s+)?trips\b", norm):
+    if re.search(r"\b(?:list|show|view|all)\s+(?:company\s+|employee\s+|all\s+)?trips\b", clean) or re.search(r"\b(?:liet\s+ke|danh\s+sach|xem)\s+(?:tat\s+ca\s+)?(?:cac\s+)?(?:chuyen\s+di|cong\s+tac|chuyen\s+cong\s+tac)\b", clean):
         return RouteDecision("SELF_SERVE", "admin_overview", trip_id=trip_id, destination=dest, admin_action="trips")
 
     # 5. Explicit preference commands.
     pref_cmd = detect_preference_command(norm)
+    if not pref_cmd:
+        if any(w in clean for w in ("ghi nho", "so thich", "thich tra loi")):
+            if "chi tiet" in clean:
+                pref_cmd = {"action": "set", "key": "preferred_output_format", "value": "detailed"}
+            elif "ngan gon" in clean:
+                pref_cmd = {"action": "set", "key": "preferred_output_format", "value": "concise"}
     if pref_cmd:
         return RouteDecision("SELF_SERVE", "preference", preference_cmd=pref_cmd)
 
     # 6. Pure greetings / help.
-    if any(re.search(p, norm) for p in _GREETING_PATTERNS):
+    if any(re.search(p, norm) or re.search(p, clean) for p in _GREETING_PATTERNS):
         return RouteDecision("SELF_SERVE", "greeting")
 
     # 7. Bare ID or bare destination/date reply (multi-turn clarification).

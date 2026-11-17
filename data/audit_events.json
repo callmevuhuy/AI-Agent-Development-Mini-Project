@@ -24,33 +24,5 @@
     "reason": "The request did not meet the mock travel eligibility requirements.",
     "timestamp": "2026-11-02T10:30:00+07:00",
     "run_id": "seed-approval-004"
-  },
-  {
-    "event_id": "EVT-0de7d6f8-fc86-4610-8ffd-0ef5dc5552ff",
-    "event_type": "workflow_run",
-    "actor_id": "U-EMP-002",
-    "role": "Employee",
-    "action": "posttrip",
-    "trip_id": null,
-    "report_id": "EXP-2026-001",
-    "outcome": "completed",
-    "reason_code": "workflow_terminal_outcome",
-    "reason": "Conversational turn completed with recorded outcome.",
-    "timestamp": "2026-11-17T00:57:24.816684+00:00",
-    "run_id": "0de7d6f8-fc86-4610-8ffd-0ef5dc5552ff"
-  },
-  {
-    "event_id": "EVT-bfcec1b8-b053-4b8a-8178-61d8c1a5e2c2",
-    "event_type": "workflow_run",
-    "actor_id": "U-EMP-002",
-    "role": "Employee",
-    "action": "intrip",
-    "trip_id": "TRIP-2026-002",
-    "report_id": null,
-    "outcome": "completed",
-    "reason_code": "workflow_terminal_outcome",
-    "reason": "Conversational turn completed with recorded outcome.",
-    "timestamp": "2026-11-17T01:04:35.929154+00:00",
-    "run_id": "bfcec1b8-b053-4b8a-8178-61d8c1a5e2c2"
   }
 ]
