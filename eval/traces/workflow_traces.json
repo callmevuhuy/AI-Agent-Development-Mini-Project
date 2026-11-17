@@ -1,10 +1,10 @@
 [
   {
     "case_id": "T01_pretrip_happy",
-    "run_id": "789eb460-53ba-4c6e-a053-57184199a104",
+    "run_id": "3becb63c-24ee-446c-9fc6-f9fa76ff2e2d",
     "trace": [
       {
-        "run_id": "789eb460-53ba-4c6e-a053-57184199a104",
+        "run_id": "3becb63c-24ee-446c-9fc6-f9fa76ff2e2d",
         "phase": "tool_execution",
         "action": "run_started",
         "tool": null,
@@ -19,7 +19,7 @@
         "case_id": "T01_pretrip_happy"
       },
       {
-        "run_id": "789eb460-53ba-4c6e-a053-57184199a104",
+        "run_id": "3becb63c-24ee-446c-9fc6-f9fa76ff2e2d",
         "phase": "pretrip_trip_lookup",
         "action": "tool_call",
         "tool": "get_trip_request",
@@ -36,7 +36,7 @@
         "case_id": "T01_pretrip_happy"
       },
       {
-        "run_id": "789eb460-53ba-4c6e-a053-57184199a104",
+        "run_id": "3becb63c-24ee-446c-9fc6-f9fa76ff2e2d",
         "phase": "pretrip_approval_lookup",
         "action": "tool_call",
         "tool": "get_approval_status",
@@ -53,7 +53,7 @@
         "case_id": "T01_pretrip_happy"
       },
       {
-        "run_id": "789eb460-53ba-4c6e-a053-57184199a104",
+        "run_id": "3becb63c-24ee-446c-9fc6-f9fa76ff2e2d",
         "phase": "pretrip_policy_retrieval",
         "action": "tool_call",
         "tool": "search_travel_policy",
@@ -72,7 +72,7 @@
         "case_id": "T01_pretrip_happy"
       },
       {
-        "run_id": "789eb460-53ba-4c6e-a053-57184199a104",
+        "run_id": "3becb63c-24ee-446c-9fc6-f9fa76ff2e2d",
         "phase": "pretrip_policy_retrieval",
         "action": "tool_call",
         "tool": "search_travel_policy",
@@ -91,7 +91,7 @@
         "case_id": "T01_pretrip_happy"
       },
       {
-        "run_id": "789eb460-53ba-4c6e-a053-57184199a104",
+        "run_id": "3becb63c-24ee-446c-9fc6-f9fa76ff2e2d",
         "phase": "pretrip_policy_retrieval",
         "action": "tool_call",
         "tool": "search_travel_policy",
@@ -110,7 +110,7 @@
         "case_id": "T01_pretrip_happy"
       },
       {
-        "run_id": "789eb460-53ba-4c6e-a053-57184199a104",
+        "run_id": "3becb63c-24ee-446c-9fc6-f9fa76ff2e2d",
         "phase": "pretrip_policy_retrieval",
         "action": "tool_call",
         "tool": "search_travel_policy",
@@ -129,7 +129,7 @@
         "case_id": "T01_pretrip_happy"
       },
       {
-        "run_id": "789eb460-53ba-4c6e-a053-57184199a104",
+        "run_id": "3becb63c-24ee-446c-9fc6-f9fa76ff2e2d",
         "phase": "pretrip_validation",
         "action": "tool_call",
         "tool": "validate_trip_requirements",
@@ -147,7 +147,7 @@
         "case_id": "T01_pretrip_happy"
       },
       {
-        "run_id": "789eb460-53ba-4c6e-a053-57184199a104",
+        "run_id": "3becb63c-24ee-446c-9fc6-f9fa76ff2e2d",
         "phase": "pretrip_draft",
         "action": "tool_call",
         "tool": "create_travel_checklist_draft",
@@ -164,7 +164,7 @@
         "case_id": "T01_pretrip_happy"
       },
       {
-        "run_id": "789eb460-53ba-4c6e-a053-57184199a104",
+        "run_id": "3becb63c-24ee-446c-9fc6-f9fa76ff2e2d",
         "phase": "pretrip_draft",
         "action": "run_finished",
         "tool": null,
@@ -182,10 +182,10 @@
   },
   {
     "case_id": "T02_intrip_delay",
-    "run_id": "d1708295-99d4-4f43-88dc-0cee60a8aa8a",
+    "run_id": "136c6677-ac1f-4d2f-a0ed-1c4437eff05b",
     "trace": [
       {
-        "run_id": "d1708295-99d4-4f43-88dc-0cee60a8aa8a",
+        "run_id": "136c6677-ac1f-4d2f-a0ed-1c4437eff05b",
         "phase": "tool_execution",
         "action": "run_started",
         "tool": null,
@@ -200,7 +200,7 @@
         "case_id": "T02_intrip_delay"
       },
       {
-        "run_id": "d1708295-99d4-4f43-88dc-0cee60a8aa8a",
+        "run_id": "136c6677-ac1f-4d2f-a0ed-1c4437eff05b",
         "phase": "intrip_itinerary_lookup",
         "action": "tool_call",
         "tool": "get_itinerary",
@@ -217,7 +217,7 @@
         "case_id": "T02_intrip_delay"
       },
       {
-        "run_id": "d1708295-99d4-4f43-88dc-0cee60a8aa8a",
+        "run_id": "136c6677-ac1f-4d2f-a0ed-1c4437eff05b",
         "phase": "intrip_policy_retrieval",
         "action": "tool_call",
         "tool": "search_travel_policy",
@@ -236,7 +236,7 @@
         "case_id": "T02_intrip_delay"
       },
       {
-        "run_id": "d1708295-99d4-4f43-88dc-0cee60a8aa8a",
+        "run_id": "136c6677-ac1f-4d2f-a0ed-1c4437eff05b",
         "phase": "intrip_draft",
         "action": "tool_call",
         "tool": "create_escalation_or_support_draft",
@@ -253,7 +253,7 @@
         "case_id": "T02_intrip_delay"
       },
       {
-        "run_id": "d1708295-99d4-4f43-88dc-0cee60a8aa8a",
+        "run_id": "136c6677-ac1f-4d2f-a0ed-1c4437eff05b",
         "phase": "intrip_draft",
         "action": "run_finished",
         "tool": null,
@@ -271,10 +271,10 @@
   },
   {
     "case_id": "T03_expense_happy",
-    "run_id": "2f2b769d-7e79-4c78-8ab2-20b72beb749e",
+    "run_id": "ee7c382c-58b0-4bc2-bbe3-d5fa1a680cbd",
     "trace": [
       {
-        "run_id": "2f2b769d-7e79-4c78-8ab2-20b72beb749e",
+        "run_id": "ee7c382c-58b0-4bc2-bbe3-d5fa1a680cbd",
         "phase": "tool_execution",
         "action": "run_started",
         "tool": null,
@@ -289,7 +289,7 @@
         "case_id": "T03_expense_happy"
       },
       {
-        "run_id": "2f2b769d-7e79-4c78-8ab2-20b72beb749e",
+        "run_id": "ee7c382c-58b0-4bc2-bbe3-d5fa1a680cbd",
         "phase": "posttrip_report_lookup",
         "action": "tool_call",
         "tool": "get_expense_report",
@@ -306,7 +306,7 @@
         "case_id": "T03_expense_happy"
       },
       {
-        "run_id": "2f2b769d-7e79-4c78-8ab2-20b72beb749e",
+        "run_id": "ee7c382c-58b0-4bc2-bbe3-d5fa1a680cbd",
         "phase": "posttrip_calculation",
         "action": "tool_call",
         "tool": "calculate_expense_summary",
@@ -323,7 +323,7 @@
         "case_id": "T03_expense_happy"
       },
       {
-        "run_id": "2f2b769d-7e79-4c78-8ab2-20b72beb749e",
+        "run_id": "ee7c382c-58b0-4bc2-bbe3-d5fa1a680cbd",
         "phase": "posttrip_policy_retrieval",
         "action": "tool_call",
         "tool": "search_travel_policy",
@@ -343,7 +343,7 @@
         "safety_event": "untrusted_policy_chunk_excluded"
       },
       {
-        "run_id": "2f2b769d-7e79-4c78-8ab2-20b72beb749e",
+        "run_id": "ee7c382c-58b0-4bc2-bbe3-d5fa1a680cbd",
         "phase": "posttrip_draft",
         "action": "tool_call",
         "tool": "create_expense_review_draft",
@@ -360,7 +360,7 @@
         "case_id": "T03_expense_happy"
       },
       {
-        "run_id": "2f2b769d-7e79-4c78-8ab2-20b72beb749e",
+        "run_id": "ee7c382c-58b0-4bc2-bbe3-d5fa1a680cbd",
         "phase": "posttrip_draft",
         "action": "run_finished",
         "tool": null,

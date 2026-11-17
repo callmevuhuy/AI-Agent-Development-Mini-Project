@@ -267,13 +267,14 @@ def detect_preference_command(norm: str) -> dict[str, Any] | None:
 
 def detect_policy_category(norm: str) -> str:
     """Infer the policy category for a knowledge query."""
-    if any(k in norm for k in ("visa", "entry", "passport", "immigration")):
+    clean = _unaccent(norm)
+    if any(k in norm or k in clean for k in ("visa", "entry", "passport", "immigration", "thi thuc", "nhap canh")):
         return "visa"
-    if any(k in norm for k in ("insurance", "medical", "health", "coverage")):
+    if any(k in norm or k in clean for k in ("insurance", "medical", "health", "coverage", "bao hiem", "y te")):
         return "insurance"
-    if any(k in norm for k in ("meal", "meals", "food", "dinner", "lunch", "lodging", "hotel", "room", "receipt", "expense", "reimburse")):
+    if any(k in norm or k in clean for k in ("meal", "meals", "food", "dinner", "lunch", "lodging", "hotel", "room", "receipt", "expense", "reimburse", "an uong", "bua an", "khach san", "tien phong", "chi phi")):
         return "expense"
-    if any(k in norm for k in ("approval", "approve", "pre-approval")):
+    if any(k in norm or k in clean for k in ("approval", "approve", "pre-approval", "phe duyet", "duyet")):
         return "approval"
     return "travel"
 
@@ -290,8 +291,14 @@ def _split_clauses(text: str) -> list[str]:
 
 def _infer_workflow_intent(norm: str, trip_id: str | None, report_id: str | None, dest: str | None, date_hint: str | None) -> str | None:
     clean = _unaccent(norm)
-    if report_id or _has_any(norm, ("expense", "expenses", "receipt", "reimburse", "reimbursement", "post-trip", "posttrip", "chi phi", "hoa don", "bao cao chi phi")):
+    is_policy_inquiry = _has_any(norm, ("cap", "limit", "allowance", "policy", "policies", "rule", "rules", "han muc", "dinh muc", "chinh sach", "quy dinh", "bao nhieu", "how much"))
+    if not report_id and is_policy_inquiry and not _has_any(norm, ("review", "check", "submit", "my expense", "my expenses", "kiem tra", "bao cao chi phi", "chuyen di cua toi")):
+        pass
+    elif report_id or _has_any(norm, ("expense report", "expense reports", "expenses report", "receipt", "reimburse", "reimbursement", "post-trip", "posttrip", "bao cao chi phi", "hoa don", "thanh toan chi phi")):
         return "posttrip"
+    elif not is_policy_inquiry and _has_any(norm, ("expense", "expenses", "chi phi")):
+        return "posttrip"
+
     if _has_any(norm, _INTRIP_KEYWORDS):
         return "intrip"
     if _has_any(norm, _PRETRIP_KEYWORDS):
@@ -357,7 +364,7 @@ def route_message_intent(message: str) -> RouteDecision:
     # 4. Admin / Reviewer overview intents.
     if re.search(r"\b(?:audit\s+(?:log|history|events?)|nhat\s+ky\s+kiem\s+toan|su\s+kien\s+an\s+ninh)\b", clean):
         return RouteDecision("SELF_SERVE", "admin_overview", trip_id=trip_id, report_id=report_id, admin_action="audit")
-    if re.search(r"\b(?:list|show|view|all)\s+(?:company\s+|employee\s+|all\s+)?trips\b", clean) or re.search(r"\b(?:liet\s+ke|danh\s+sach|xem)\s+(?:tat\s+ca\s+)?(?:cac\s+)?(?:chuyen\s+di|cong\s+tac|chuyen\s+cong\s+tac)\b", clean):
+    if re.search(r"\b(?:list|show|view|all)\s+(?:company\s+|employee\s+|all\s+)?trips\b", clean) or re.search(r"\b(?:liet\s+ke|danh\s+sach|xem)\s+(?:tat\s+ca\s+|toan\s+bo\s+)?(?:cac\s+)?(?:chuyen\s+di|cong\s+tac|chuyen\s+cong\s+tac)(?:\s+cua\s+nhan\s+vien)?\b", clean):
         return RouteDecision("SELF_SERVE", "admin_overview", trip_id=trip_id, destination=dest, admin_action="trips")
 
     # 5. Explicit preference commands.

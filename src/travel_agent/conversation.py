@@ -160,7 +160,27 @@ def _enrich_trip_and_traveler(
     return result
 
 
-def _trip_details_block(result: dict[str, Any]) -> list[str]:
+def _is_vietnamese(text: str, user_context: dict[str, Any]) -> bool:
+    """Detect whether user input or preference requires Vietnamese response formatting."""
+    if user_context.get("role") in {"Employee", "Reviewer", "Approver"}:
+        pref = get_preferences(user_context)
+        if pref.get("response_language") == "vi":
+            return True
+        if pref.get("response_language") == "en":
+            return False
+    vn_chars = "àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ"
+    if any(c in text.lower() for c in vn_chars):
+        return True
+    from travel_agent.nlu import _unaccent
+    vn_keywords = {
+        "chuyen", "bay", "di", "toi", "cua", "bi", "tre", "hoan", "chuan", "bi", "chi",
+        "phi", "khach", "san", "han", "muc", "duyet", "liet", "ke", "nhat", "ky", "kiem", "toan"
+    }
+    tokens = set(re.findall(r"\w+", _unaccent(text.lower())))
+    return len(tokens & vn_keywords) >= 2
+
+
+def _trip_details_block(result: dict[str, Any], is_vi: bool = False) -> list[str]:
     lines: list[str] = []
     trip = result.get("trip")
     traveler = result.get("traveler")
@@ -174,17 +194,25 @@ def _trip_details_block(result: dict[str, Any]) -> list[str]:
         ap = f" ({trip['origin_airport']})" if trip.get("origin_airport") else ""
         dest = trip.get("destination", "Unknown")
         purpose = trip.get("purpose")
-        lines.append("Trip Details:")
+        lines.append("Thông tin chuyến đi (Trip Details):" if is_vi else "Trip Details:")
         if traveler_line:
             lines.append(f"  - Traveler: {traveler_line}")
-        lines.extend([
-            f"  - Route: {origin}{ap} -> {dest}",
-            f"  - Dates: {trip.get('start_date', 'N/A')} to {trip.get('end_date', 'N/A')}",
-            f"  - Purpose: {purpose if isinstance(purpose, str) and purpose.strip() else '[MISSING — required]'}",
-            f"  - Trip Status: {_human_trip_status(trip.get('travel_status'))}",
-        ])
+        if is_vi:
+            lines.extend([
+                f"  - Tuyến đi (Route): {origin}{ap} -> {dest}",
+                f"  - Lịch trình (Dates): {trip.get('start_date', 'N/A')} đến {trip.get('end_date', 'N/A')}",
+                f"  - Mục đích (Purpose): {purpose if isinstance(purpose, str) and purpose.strip() else '[MISSING — required]'}",
+                f"  - Trạng thái chuyến đi (Trip Status): {_human_trip_status(trip.get('travel_status'))}",
+            ])
+        else:
+            lines.extend([
+                f"  - Route: {origin}{ap} -> {dest}",
+                f"  - Dates: {trip.get('start_date', 'N/A')} to {trip.get('end_date', 'N/A')}",
+                f"  - Purpose: {purpose if isinstance(purpose, str) and purpose.strip() else '[MISSING — required]'}",
+                f"  - Trip Status: {_human_trip_status(trip.get('travel_status'))}",
+            ])
     elif traveler_line:
-        lines.extend(["Traveler Details:", f"  - Traveler: {traveler_line}"])
+        lines.extend(["Thông tin người đi (Traveler Details):" if is_vi else "Traveler Details:", f"  - Traveler: {traveler_line}"])
     flight = result.get("flight_facts") or (result.get("support_draft") or {}).get("flight_facts")
     disruption = (result.get("support_draft") or {}).get("disruption")
     if isinstance(flight, dict) and flight:
@@ -192,15 +220,24 @@ def _trip_details_block(result: dict[str, Any]) -> list[str]:
         d_ap = f" ({flight['destination_airport']})" if flight.get("destination_airport") else ""
         if lines:
             lines.append("")
-        lines.extend([
-            f"Flight Details ({flight.get('flight_id', 'N/A')}):",
-            f"  - Departure: {flight.get('origin', 'Unknown')}{o_ap} at {_fmt_iso_dt(flight.get('departure'))}",
-            f"  - Arrival: {flight.get('destination', 'Unknown')}{d_ap} at {_fmt_iso_dt(flight.get('arrival'))}",
-            f"  - Flight Status: {_human_flight_status(flight.get('status'), disruption)}",
-        ])
+        header = f"Thông tin chuyến bay (Flight Details - {flight.get('flight_id', 'N/A')}):" if is_vi else f"Flight Details ({flight.get('flight_id', 'N/A')}):"
+        if is_vi:
+            lines.extend([
+                header,
+                f"  - Khởi hành: {flight.get('origin', 'Unknown')}{o_ap} lúc {_fmt_iso_dt(flight.get('departure'))}",
+                f"  - Đến nơi: {flight.get('destination', 'Unknown')}{d_ap} lúc {_fmt_iso_dt(flight.get('arrival'))}",
+                f"  - Trạng thái chuyến bay (Flight Status): {_human_flight_status(flight.get('status'), disruption)}",
+            ])
+        else:
+            lines.extend([
+                header,
+                f"  - Departure: {flight.get('origin', 'Unknown')}{o_ap} at {_fmt_iso_dt(flight.get('departure'))}",
+                f"  - Arrival: {flight.get('destination', 'Unknown')}{d_ap} at {_fmt_iso_dt(flight.get('arrival'))}",
+                f"  - Flight Status: {_human_flight_status(flight.get('status'), disruption)}",
+            ])
     hotel = result.get("hotel")
     if isinstance(hotel, dict) and hotel.get("name"):
-        lines.append(f"  - Hotel: {hotel['name']} ({hotel.get('check_in', '')} to {hotel.get('check_out', '')})")
+        lines.append(f"  - Khách sạn (Hotel): {hotel['name']} ({hotel.get('check_in', '')} đến {hotel.get('check_out', '')})" if is_vi else f"  - Hotel: {hotel['name']} ({hotel.get('check_in', '')} to {hotel.get('check_out', '')})")
     return lines
 
 
@@ -255,29 +292,32 @@ def _format_handoff_response(
     citations: list[str],
     output_format: str,
     result: dict[str, Any] | None = None,
+    is_vi: bool = False,
 ) -> str:
     """Strictly deterministic handoff message: clean layout, verified facts only, zero improvised claims."""
     lines = [
         f"[HANDOFF TO STAFF | Ticket: {handoff_id}]",
         "",
-        f"Reason: {reason}",
+        f"Lý do chuyển tiếp (Reason): {reason}" if is_vi else f"Reason: {reason}",
     ]
-    detail_lines = _trip_details_block(result or {})
+    detail_lines = _trip_details_block(result or {}, is_vi=is_vi)
     if detail_lines:
         lines.append("")
         lines.extend(detail_lines)
     if facts_summary:
-        lines.extend(["", f"Verified Summary: {facts_summary}"])
+        lines.extend(["", f"Tóm tắt dữ kiện xác thực (Verified Summary): {facts_summary}" if is_vi else f"Verified Summary: {facts_summary}"])
     ev_lines = _format_evidence_lines(result or {}, max_items=3 if output_format == "concise" else None)
     if ev_lines:
-        lines.extend(["", "Policy Sources Referenced:"])
+        lines.extend(["", "Căn cứ chính sách tham chiếu (Policy Sources Referenced):" if is_vi else "Policy Sources Referenced:"])
         lines.extend(ev_lines)
     elif citations:
         limit = 3 if output_format == "concise" else len(citations)
-        lines.extend(["", f"Recorded Citations: {' ; '.join(citations[:limit])}"])
+        lines.extend(["", f"Trích dẫn đã ghi nhận (Recorded Citations): {' ; '.join(citations[:limit])}" if is_vi else f"Recorded Citations: {' ; '.join(citations[:limit])}"])
     lines.extend([
         "",
-        "Next Step: This case is queued for Travel Operations Staff. No automated booking, payment, or approval decision was made.",
+        "Bước tiếp theo (Next Step): Yêu cầu này đã được chuyển tiếp đến nhân viên Vận hành Du lịch (Travel Operations Staff). No automated booking, payment, or approval decision was made."
+        if is_vi
+        else "Next Step: This case is queued for Travel Operations Staff. No automated booking, payment, or approval decision was made.",
     ])
     return "\n".join(lines)
 
@@ -288,12 +328,23 @@ def _format_workflow_success(
     citations: list[str],
     output_format: str,
     policy_note: str | None = None,
+    is_vi: bool = False,
 ) -> str:
     draft = result.get("draft", {})
     draft_info = f"Draft {draft.get('draft_id')} ({draft.get('delivery_status')})" if isinstance(draft, dict) and draft.get("draft_id") else "No draft created"
-    lines = [f"[{workflow.upper()} | COMPLETED]", result.get("message", "")]
+    
+    msg = result.get("message", "")
+    if is_vi:
+        if workflow == "pretrip":
+            msg = "Kế hoạch công tác và danh sách checklist tuân thủ đã sẵn sàng trong sandbox; không thực hiện đặt phòng hay thanh toán tự động."
+        elif workflow == "intrip":
+            msg = "Hướng dẫn xử lý gián đoạn chuyến bay đã sẵn sàng; hệ thống không tự ý đặt vé, chi tiêu hay liên hệ bên ngoài."
+        elif workflow == "posttrip":
+            msg = "Kiểm toán báo cáo chi phí hoàn tất đối chiếu với các định mức chính sách doanh nghiệp."
 
-    detail_lines = _trip_details_block(result)
+    lines = [f"[{workflow.upper()} | COMPLETED]", msg]
+
+    detail_lines = _trip_details_block(result, is_vi=is_vi)
     if detail_lines:
         lines.append("")
         lines.extend(detail_lines)
@@ -301,40 +352,41 @@ def _format_workflow_success(
     if workflow == "intrip" and isinstance(result.get("support_draft"), dict):
         follow_up = result["support_draft"].get("recommended_follow_up")
         if follow_up:
-            lines.extend(["", "Grounded Guidance:", f"  - {follow_up}"])
+            lines.extend(["", "Hướng dẫn có căn cứ (Grounded Guidance):" if is_vi else "Grounded Guidance:", f"  - {follow_up}"])
 
     if workflow == "posttrip" and isinstance(result.get("review_preview"), dict):
         summary = result["review_preview"].get("summary", {})
         if isinstance(summary, dict) and summary:
             lines.extend([
                 "",
-                "Expense Summary (Deterministic):",
+                "Tóm tắt chi phí (Expense Summary):" if is_vi else "Expense Summary (Deterministic):",
                 f"  - Report ID: {summary.get('report_id')} | Total: {summary.get('total')} {summary.get('currency', '')}",
                 f"  - Category Totals: {summary.get('category_totals')}",
             ])
 
     ev_lines = _format_evidence_lines(result, max_items=3 if output_format == "concise" else None)
     if ev_lines:
-        lines.extend(["", "Policy Sources Cited:"])
+        lines.extend(["", "Căn cứ chính sách trích dẫn (Policy Sources Cited):" if is_vi else "Policy Sources Cited:"])
         lines.extend(ev_lines)
     elif citations:
-        lines.extend(["", f"Citations: {' ; '.join(citations[:3] if output_format == 'concise' else citations)}"])
+        lines.extend(["", f"Trích dẫn (Citations): {' ; '.join(citations[:3] if output_format == 'concise' else citations)}" if is_vi else f"Citations: {' ; '.join(citations[:3] if output_format == 'concise' else citations)}"])
 
     if policy_note:
-        lines.extend(["", "Additional Policy Q&A:", f"  {policy_note}"])
+        lines.extend(["", "Giải đáp chính sách bổ sung (Policy Q&A):" if is_vi else "Additional Policy Q&A:", f"  {policy_note}"])
 
     if output_format == "detailed":
-        lines.extend(["", f"Sandbox Artifact: {draft_info}"])
+        lines.extend(["", f"Sản phẩm Sandbox (Sandbox Artifact): {draft_info}" if is_vi else f"Sandbox Artifact: {draft_info}"])
     else:
-        lines.extend(["", f"Artifact: {draft_info}"])
+        lines.extend(["", f"Sản phẩm (Artifact): {draft_info}" if is_vi else f"Artifact: {draft_info}"])
     return "\n".join(lines)
 
 
-def _format_clarify_workflow(workflow: str, result: dict[str, Any], output_format: str) -> str:
+def _format_clarify_workflow(workflow: str, result: dict[str, Any], output_format: str, is_vi: bool = False) -> str:
     """Format a structured breakdown of current checklist/review status and exact missing items."""
-    lines = [f"[{workflow.upper()} | NEEDS INPUT]", result.get("message", "More information is required.")]
+    msg = "Cần bổ sung thêm thông tin." if is_vi else "More information is required."
+    lines = [f"[{workflow.upper()} | NEEDS INPUT]", result.get("message", msg)]
 
-    detail_lines = _trip_details_block(result)
+    detail_lines = _trip_details_block(result, is_vi=is_vi)
     if detail_lines:
         lines.append("")
         lines.extend(detail_lines)
@@ -345,25 +397,25 @@ def _format_clarify_workflow(workflow: str, result: dict[str, Any], output_forma
         approval_status = validation.get("trip_approval_status")
         dest = (result.get("trip") or {}).get("destination", "this destination")
         if validation.get("unknown_destination_requirements"):
-            dest_note = f"No configured policy requirements for {dest} (staff review needed once fields are complete)"
+            dest_note = f"Chưa cấu hình chính sách cho {dest} (cần nhân sự xem xét khi đủ trường)" if is_vi else f"No configured policy requirements for {dest} (staff review needed once fields are complete)"
         elif validation.get("required_policy_categories"):
-            dest_note = f"Required policy categories: {', '.join(validation['required_policy_categories'])}"
+            dest_note = f"Danh mục chính sách bắt buộc: {', '.join(validation['required_policy_categories'])}" if is_vi else f"Required policy categories: {', '.join(validation['required_policy_categories'])}"
         else:
-            dest_note = "Not evaluated yet"
+            dest_note = "Chưa đánh giá" if is_vi else "Not evaluated yet"
 
         lines.extend([
             "",
-            "Current Checklist Status:",
-            "  - Checklist Draft: Not created yet (blocked by missing required trip fields)",
-            f"  - Approval Status: {approval_status or 'Not submitted (no approval record)'}",
-            f"  - Destination Policy Config: {dest_note}",
+            "Trạng thái danh sách kiểm tra (Current Checklist Status):" if is_vi else "Current Checklist Status:",
+            "  - Checklist Draft: Chưa tạo do thiếu các trường bắt buộc" if is_vi else "  - Checklist Draft: Not created yet (blocked by missing required trip fields)",
+            f"  - Trạng thái phê duyệt (Approval Status): {approval_status or 'Chưa nộp (chưa có bản ghi duyệt)'}" if is_vi else f"  - Approval Status: {approval_status or 'Not submitted (no approval record)'}",
+            f"  - Cấu hình chính sách điểm đến: {dest_note}" if is_vi else f"  - Destination Policy Config: {dest_note}",
             "",
-            "Missing / Needs Clarification:",
+            "Các trường thiếu / Cần làm rõ (Missing / Needs Clarification):" if is_vi else "Missing / Needs Clarification:",
         ])
         for field in missing_fields:
-            lines.append(f"  - Missing required field: `{field}` (please provide this information to continue)")
+            lines.append(f"  - Missing required field: `{field}` (vui lòng cung cấp thông tin này để tiếp tục)" if is_vi else f"  - Missing required field: `{field}` (please provide this information to continue)")
         if not missing_fields:
-            lines.append("  - Required trip details are incomplete.")
+            lines.append("  - Thông tin chuyến đi chưa đầy đủ." if is_vi else "  - Required trip details are incomplete.")
         return "\n".join(lines)
 
     if workflow == "posttrip":
@@ -373,40 +425,40 @@ def _format_clarify_workflow(workflow: str, result: dict[str, Any], output_forma
         draft_info = f"Draft {draft.get('draft_id')} ({draft.get('delivery_status')})" if draft.get("draft_id") else "Not created"
         lines.extend([
             "",
-            "Current Expense Review Status:",
-            f"  - Report ID: {summary.get('report_id', 'N/A')} | Calculated Total: {summary.get('total', 'N/A')} {summary.get('currency', '')}".strip(),
+            "Trạng thái kiểm toán chi phí (Current Expense Review Status):" if is_vi else "Current Expense Review Status:",
+            f"  - Report ID: {summary.get('report_id', 'N/A')} | Tổng tính toán: {summary.get('total', 'N/A')} {summary.get('currency', '')}".strip() if is_vi else f"  - Report ID: {summary.get('report_id', 'N/A')} | Calculated Total: {summary.get('total', 'N/A')} {summary.get('currency', '')}".strip(),
             f"  - Category Totals: {summary.get('category_totals', {})}",
             f"  - Sandbox Artifact: {draft_info}",
         ])
         ev_lines = _format_evidence_lines(result, max_items=3 if output_format == "concise" else None)
         if ev_lines:
-            lines.extend(["", "Policy Sources Cited:"])
+            lines.extend(["", "Căn cứ chính sách trích dẫn (Policy Sources Cited):" if is_vi else "Policy Sources Cited:"])
             lines.extend(ev_lines)
 
-        lines.extend(["", "Missing / Needs Clarification:"])
+        lines.extend(["", "Các mục thiếu / Cần làm rõ (Missing / Needs Clarification):" if is_vi else "Missing / Needs Clarification:"])
         for item_id in summary.get("missing_receipts", []):
             lines.append(f"  - Missing receipt attachment for item `{item_id}`")
         for mf in summary.get("missing_fields", []):
-            lines.append(f"  - Missing field(s) on `{mf.get('item_id')}`: {', '.join(mf.get('fields', []))}")
+            lines.append(f"  - Thiếu trường dữ liệu trên `{mf.get('item_id')}`: {', '.join(mf.get('fields', []))}" if is_vi else f"  - Missing field(s) on `{mf.get('item_id')}`: {', '.join(mf.get('fields', []))}")
         for inv in summary.get("invalid_items", []):
-            lines.append(f"  - Invalid or incomplete item `{inv}`")
+            lines.append(f"  - Mục không hợp lệ `{inv}`" if is_vi else f"  - Invalid or incomplete item `{inv}`")
         return "\n".join(lines)
 
     return "\n".join(lines)
 
 
-def _format_policy_qa(data: dict[str, Any], output_format: str) -> tuple[str, list[str]]:
+def _format_policy_qa(data: dict[str, Any], output_format: str, is_vi: bool = False) -> tuple[str, list[str]]:
     chunks = data.get("results", [])
     citations = [chunk["citation"] for chunk in chunks if isinstance(chunk.get("citation"), str)]
     if output_format == "concise":
         top = chunks[0]
-        text = f"Source: {top['source']} (§{top['section']}, v{top['version']})\n{top['text']}\nCitation: {top['citation']}"
+        text = f"Nguồn (Source): {top['source']} (§{top['section']}, v{top['version']})\n{top['text']}\nTrích dẫn (Citation): {top['citation']}" if is_vi else f"Source: {top['source']} (§{top['section']}, v{top['version']})\n{top['text']}\nCitation: {top['citation']}"
         return text, citations
-    lines = ["Grounded Policy Evidence:"]
+    lines = ["Căn cứ chính sách đã xác thực (Grounded Policy Evidence):" if is_vi else "Grounded Policy Evidence:"]
     for chunk in chunks:
-        lines.append(f"\n- Source: {chunk['source']} (§{chunk['section']}, v{chunk['version']})")
+        lines.append(f"\n- Nguồn (Source): {chunk['source']} (§{chunk['section']}, v{chunk['version']})" if is_vi else f"\n- Source: {chunk['source']} (§{chunk['section']}, v{chunk['version']})")
         lines.append(f"  {chunk['text']}")
-        lines.append(f"  Citation: {chunk['citation']}")
+        lines.append(f"  Trích dẫn (Citation): {chunk['citation']}" if is_vi else f"  Citation: {chunk['citation']}")
     return "\n".join(lines), citations
 
 
@@ -441,6 +493,7 @@ def _resolve_natural_record(
     decision: RouteDecision,
     wf: str,
     user_context: dict[str, Any],
+    is_vi: bool = False,
 ) -> tuple[str | None, str | None, str | None]:
     """Resolve trip_id / report_id via scoped list_my_trips / list_my_expenses when ID is omitted."""
     target_trip = decision.trip_id
@@ -457,8 +510,18 @@ def _resolve_natural_record(
                 return reports[0]["trip_id"], reports[0]["report_id"], None
             if len(reports) > 1:
                 opts = "\n".join(f"  - {r['report_id']} (Trip {r['trip_id']}, {len(r.get('line_items', []))} items)" for r in reports)
-                return None, None, f"You have multiple expense reports. Which one should I review?\n{opts}"
-            return None, None, "No expense reports were found for your account. Please specify an EXP-YYYY-NNN ID."
+                msg = (
+                    f"Bạn có nhiều báo cáo chi phí. Bạn muốn tôi kiểm tra báo cáo nào?\n{opts}"
+                    if is_vi
+                    else f"You have multiple expense reports. Which one should I review?\n{opts}"
+                )
+                return None, None, msg
+            msg = (
+                "Không tìm thấy báo cáo chi phí nào cho tài khoản của bạn. Vui lòng cung cấp mã EXP-YYYY-NNN."
+                if is_vi
+                else "No expense reports were found for your account. Please specify an EXP-YYYY-NNN ID."
+            )
+            return None, None, msg
 
     if not target_trip:
         temp = RunState(wf if wf in _WORKFLOWS else "pretrip", user_context, phase="record_lookup")
@@ -481,34 +544,70 @@ def _resolve_natural_record(
                 } - {""}
                 if flight_dates and decision.date_hint not in flight_dates:
                     disruption = itin_res.get("data", {}).get("disruption") if itin_res.get("ok") else None
-                    return None, None, (
-                        f"I could not find a flight scheduled on {decision.date_hint}.\n"
-                        f"Your recorded {candidate.get('destination')} trip ({candidate['trip_id']}, "
-                        f"{candidate.get('start_date')} to {candidate.get('end_date')}) has flight "
-                        f"{flight.get('flight_id', 'N/A')} on {', '.join(sorted(flight_dates))} "
-                        f"(Status: {_human_flight_status(flight.get('status'), disruption)}).\n\n"
-                        f"Please reply with `{candidate['trip_id']}` if you meant that flight, or confirm the date."
-                    )
+                    if is_vi:
+                        msg = (
+                            f"Không tìm thấy chuyến bay nào được lên lịch vào ngày {decision.date_hint}.\n"
+                            f"Chuyến đi {candidate.get('destination')} của bạn ({candidate['trip_id']}, "
+                            f"{candidate.get('start_date')} đến {candidate.get('end_date')}) có chuyến bay "
+                            f"{flight.get('flight_id', 'N/A')} vào ngày {', '.join(sorted(flight_dates))} "
+                            f"(Status: {_human_flight_status(flight.get('status'), disruption)}).\n\n"
+                            f"Vui lòng trả lời bằng `{candidate['trip_id']}` nếu bạn muốn kiểm tra chuyến bay đó, hoặc xác nhận lại ngày."
+                        )
+                    else:
+                        msg = (
+                            f"I could not find a flight scheduled on {decision.date_hint}.\n"
+                            f"Your recorded {candidate.get('destination')} trip ({candidate['trip_id']}, "
+                            f"{candidate.get('start_date')} to {candidate.get('end_date')}) has flight "
+                            f"{flight.get('flight_id', 'N/A')} on {', '.join(sorted(flight_dates))} "
+                            f"(Status: {_human_flight_status(flight.get('status'), disruption)}).\n\n"
+                            f"Please reply with `{candidate['trip_id']}` if you meant that flight, or confirm the date."
+                        )
+                    return None, None, msg
             elif decision.date_hint and wf == "pretrip" and candidate.get("start_date") != decision.date_hint:
-                return None, None, (
-                    f"No trip departs on {decision.date_hint}.\n"
-                    f"Your recorded {candidate.get('destination')} trip ({candidate['trip_id']}) is scheduled from "
-                    f"{candidate.get('start_date')} to {candidate.get('end_date')}.\n\n"
-                    f"Please reply with `{candidate['trip_id']}` if you meant this trip."
-                )
+                if is_vi:
+                    msg = (
+                        f"Không có chuyến đi nào khởi hành vào ngày {decision.date_hint}.\n"
+                        f"Chuyến đi {candidate.get('destination')} của bạn ({candidate['trip_id']}) được lên lịch từ "
+                        f"{candidate.get('start_date')} đến {candidate.get('end_date')}.\n\n"
+                        f"Vui lòng trả lời bằng `{candidate['trip_id']}` nếu bạn muốn kiểm tra chuyến đi này."
+                    )
+                else:
+                    msg = (
+                        f"No trip departs on {decision.date_hint}.\n"
+                        f"Your recorded {candidate.get('destination')} trip ({candidate['trip_id']}) is scheduled from "
+                        f"{candidate.get('start_date')} to {candidate.get('end_date')}.\n\n"
+                        f"Please reply with `{candidate['trip_id']}` if you meant this trip."
+                    )
+                return None, None, msg
             target_trip = candidate["trip_id"]
         elif len(matches) > 1:
             opts = "\n".join(_format_trip_choice(t) for t in matches)
-            return None, None, f"I found multiple trips matching your request. Which trip do you mean?\n{opts}"
+            msg = (
+                f"Tìm thấy nhiều chuyến đi phù hợp với yêu cầu của bạn. Bạn muốn chọn chuyến nào?\n{opts}"
+                if is_vi
+                else f"I found multiple trips matching your request. Which trip do you mean?\n{opts}"
+            )
+            return None, None, msg
         else:
             # No match for the specified date/destination -> list available trips cleanly for clarification.
             all_res = run_tool(RunState(wf if wf in _WORKFLOWS else "pretrip", user_context, phase="record_lookup"), "list_my_trips", {})
             all_trips = all_res.get("data", []) if all_res.get("ok") else []
             if not all_trips:
-                return None, None, "No trips were found for your account. Please provide a valid TRIP-YYYY-NNN ID."
-            detail = f"on {decision.date_hint}" if decision.date_hint else (f"to {decision.destination}" if decision.destination else "matching your request")
-            opts = "\n".join(_format_trip_choice(t) for t in all_trips)
-            return None, None, f"I could not find a recorded trip {detail}. Your recorded trips are:\n{opts}\n\nPlease reply with the destination, date, or trip ID."
+                msg = (
+                    "Không tìm thấy chuyến đi nào trong tài khoản của bạn. Vui lòng cung cấp mã TRIP-YYYY-NNN hợp lệ."
+                    if is_vi
+                    else "No trips were found for your account. Please provide a valid TRIP-YYYY-NNN ID."
+                )
+                return None, None, msg
+            if is_vi:
+                detail = f"vào ngày {decision.date_hint}" if decision.date_hint else (f"đến {decision.destination}" if decision.destination else "phù hợp với yêu cầu")
+                opts = "\n".join(_format_trip_choice(t) for t in all_trips)
+                msg = f"Không tìm thấy chuyến đi nào đã ghi nhận {detail}. Các chuyến đi đã ghi nhận của bạn:\n{opts}\n\nVui lòng trả lời với điểm đến, ngày hoặc trip_id."
+            else:
+                detail = f"on {decision.date_hint}" if decision.date_hint else (f"to {decision.destination}" if decision.destination else "matching your request")
+                opts = "\n".join(_format_trip_choice(t) for t in all_trips)
+                msg = f"I could not find a recorded trip {detail}. Your recorded trips are:\n{opts}\n\nPlease reply with the destination, date, or trip ID."
+            return None, None, msg
 
     if wf == "posttrip" and target_trip and not target_report:
         temp = RunState("posttrip", user_context, phase="record_lookup")
@@ -518,9 +617,19 @@ def _resolve_natural_record(
             target_report = reports[0]["report_id"]
         elif len(reports) > 1:
             opts = "\n".join(f"  - {r['report_id']} (Trip {r['trip_id']})" for r in reports)
-            return target_trip, None, f"Multiple expense reports exist for {target_trip}. Which one should I review?\n{opts}"
+            msg = (
+                f"Có nhiều báo cáo chi phí cho chuyến {target_trip}. Bạn muốn tôi kiểm tra báo cáo nào?\n{opts}"
+                if is_vi
+                else f"Multiple expense reports exist for {target_trip}. Which one should I review?\n{opts}"
+            )
+            return target_trip, None, msg
         else:
-            return target_trip, None, f"No expense report was found linked to {target_trip}. Please specify an EXP-YYYY-NNN ID."
+            msg = (
+                f"Không tìm thấy báo cáo chi phí nào liên kết với chuyến {target_trip}. Vui lòng cung cấp mã EXP-YYYY-NNN."
+                if is_vi
+                else f"No expense report was found linked to {target_trip}. Please specify an EXP-YYYY-NNN ID."
+            )
+            return target_trip, None, msg
 
     return target_trip, target_report, None
 
@@ -555,7 +664,7 @@ def _resolve_with_session(decision: RouteDecision, user_context: dict[str, Any],
     return decision
 
 
-def _handle_preference(user_context: dict[str, Any], cmd: dict[str, Any]) -> tuple[str, RunState]:
+def _handle_preference(user_context: dict[str, Any], cmd: dict[str, Any], is_vi: bool = False) -> tuple[str, RunState]:
     auth_ctx = {**user_context, "memory_write_authorized": True}
     state = RunState("pretrip", auth_ctx, phase="preference_management")
     action = cmd["action"]
@@ -565,27 +674,45 @@ def _handle_preference(user_context: dict[str, Any], cmd: dict[str, Any]) -> tup
             res = run_tool(state, "get_preference", {"key": key})
             state.finish("completed" if res.get("ok") else "failed_validation")
             val = res.get("data")
-            msg = f"Your saved preference `{key}` is `{val}`." if val else f"No saved preference found for `{key}`."
+            if is_vi:
+                msg = f"Tùy chọn đã lưu `{key}` của bạn là `{val}`." if val else f"Không tìm thấy tùy chọn đã lưu cho `{key}`."
+            else:
+                msg = f"Your saved preference `{key}` is `{val}`." if val else f"No saved preference found for `{key}`."
             return msg, state
         prefs = get_preferences(user_context)
         state.finish("completed")
-        msg = f"Saved preferences: {prefs}" if prefs else "You currently have no saved persistent preferences."
+        if is_vi:
+            msg = f"Tùy chọn đã lưu (Saved preferences): {prefs}" if prefs else "Bạn hiện chưa có tùy chọn cá nhân nào được lưu."
+        else:
+            msg = f"Saved preferences: {prefs}" if prefs else "You currently have no saved persistent preferences."
         return msg, state
     if action == "set":
         res = run_tool(state, "set_preference", {"key": key, "value": cmd["value"]})
         state.finish("completed" if res.get("ok") else "failed_validation")
         if res.get("ok"):
-            return f"Saved preference `{key}` = `{cmd['value']}`.", state
-        return "Could not update preference due to invalid arguments or permissions.", state
+            msg = f"Đã lưu tùy chọn `{key}` = `{cmd['value']}` (Saved preference)." if is_vi else f"Saved preference `{key}` = `{cmd['value']}`."
+            return msg, state
+        msg = "Không thể cập nhật tùy chọn do tham số hoặc quyền không hợp lệ." if is_vi else "Could not update preference due to invalid arguments or permissions."
+        return msg, state
     res = run_tool(state, "delete_preference", {"key": key})
     state.finish("completed" if res.get("ok") else "failed_validation")
     if res.get("ok"):
         existed = res.get("data")
-        return f"Deleted preference `{key}`." if existed else f"No `{key}` preference was saved.", state
-    return "Could not delete preference due to invalid arguments or permissions.", state
+        if is_vi:
+            msg = f"Đã xóa tùy chọn `{key}`." if existed else f"Không có tùy chọn `{key}` nào được lưu."
+        else:
+            msg = f"Deleted preference `{key}`." if existed else f"No `{key}` preference was saved."
+        return msg, state
+    msg = "Không thể xóa tùy chọn do tham số hoặc quyền không hợp lệ." if is_vi else "Could not delete preference due to invalid arguments or permissions."
+    return msg, state
 
 
-def _handle_admin_overview(user: dict[str, Any], user_context: dict[str, Any], decision: RouteDecision) -> tuple[str, str, RunState]:
+def _handle_admin_overview(
+    user: dict[str, Any],
+    user_context: dict[str, Any],
+    decision: RouteDecision,
+    is_vi: bool = False,
+) -> tuple[str, str, RunState]:
     if user["role"] == "Reviewer" and decision.admin_action == "trips":
         state = RunState("pretrip", user_context, phase="reviewer_trip_list")
         args = {"destination": decision.destination} if decision.destination else {}
@@ -593,7 +720,8 @@ def _handle_admin_overview(user: dict[str, Any], user_context: dict[str, Any], d
         state.finish("completed" if res.get("ok") else "failed_validation")
         rows = res.get("data", []) if res.get("ok") else []
         cache: dict[str, str] = {}
-        lines = [f"[REVIEWER | ALL EMPLOYEE TRIPS ({len(rows)})]", ""]
+        header = f"[REVIEWER | TOÀN BỘ CHUYẾN ĐI CỦA NHÂN VIÊN ({len(rows)})]" if is_vi else f"[REVIEWER | ALL EMPLOYEE TRIPS ({len(rows)})]"
+        lines = [header, ""]
         for t in rows:
             tid = t.get("traveler_id")
             if tid and tid not in cache:
@@ -611,26 +739,30 @@ def _handle_admin_overview(user: dict[str, Any], user_context: dict[str, Any], d
         res = run_tool(state, "admin_get_audit_history", args)
         if not res.get("ok"):
             state.finish("failed_validation")
-            return "REJECT_SAFETY", "Unauthorized: only Admin accounts can inspect audit history.", state
+            err = "Không có quyền: Chỉ tài khoản Admin mới có thể kiểm tra lịch sử kiểm toán." if is_vi else "Unauthorized: only Admin accounts can inspect audit history."
+            return "REJECT_SAFETY", err, state
         state.finish("completed")
         events = res["data"]
-        lines = [f"[ADMIN | AUDIT HISTORY ({len(events)} events)]", ""]
+        header = f"[ADMIN | LỊCH SỬ KIỂM TOÁN ({len(events)} sự kiện)]" if is_vi else f"[ADMIN | AUDIT HISTORY ({len(events)} events)]"
+        lines = [header, ""]
         for ev in events[-10:]:
             lines.append(
                 f"  - {ev.get('event_id')} | {ev.get('timestamp')} | {ev.get('event_type')} | Actor: {ev.get('actor_id')} ({ev.get('role')}) "
                 f"| Trip/Report: {ev.get('trip_id') or ev.get('report_id') or '-'} | Outcome: {ev.get('outcome')} | Reason: {ev.get('reason_code')}"
             )
         if not events:
-            lines.append("  No audit events match this filter.")
+            lines.append("  Không có sự kiện kiểm toán nào phù hợp." if is_vi else "  No audit events match this filter.")
         return "SELF_SERVE", "\n".join(lines), state
 
     res = run_tool(state, "admin_list_trips", {})
     if not res.get("ok"):
         state.finish("failed_validation")
-        return "REJECT_SAFETY", "Unauthorized: only Admin accounts can run admin trip overview.", state
+        err = "Không có quyền: Chỉ tài khoản Admin mới có thể xem tổng quan chuyến đi." if is_vi else "Unauthorized: only Admin accounts can run admin trip overview."
+        return "REJECT_SAFETY", err, state
     state.finish("completed")
     trips = res["data"]
-    lines = [f"[ADMIN | READ-ONLY TRIP OVERVIEW ({len(trips)} trips)]", ""]
+    header = f"[ADMIN | TỔNG QUAN CHUYẾN ĐI (CHỈ ĐỌC) ({len(trips)} chuyến)]" if is_vi else f"[ADMIN | READ-ONLY TRIP OVERVIEW ({len(trips)} trips)]"
+    lines = [header, ""]
     lines.extend(_format_trip_choice(t) for t in trips)
     return "SELF_SERVE", "\n".join(lines), state
 
@@ -640,16 +772,18 @@ def _handle_approver_turn(
     user_context: dict[str, Any],
     decision: RouteDecision,
     approval_scope: dict[str, str] | None,
+    is_vi: bool = False,
 ) -> tuple[str, str, str, list[str], str, RunState]:
     if not isinstance(approval_scope, dict) or not approval_scope.get("trip_id") or not approval_scope.get("action_type"):
         state = RunState("pretrip", user_context, phase="approver_scope_missing")
         state.finish("needs_human")
+        err = "Tài khoản Approver yêu cầu phạm vi phê duyệt đang chờ xử lý từ ứng dụng." if is_vi else "Approver accounts require an application-supplied pending approval scope."
         return (
             "HANDOFF_STAFF",
             "needs_human",
             "",
             [],
-            "Approver accounts require an application-supplied pending approval scope.",
+            err,
             state,
         )
     scoped_ctx = {**user_context, "approval_scope": approval_scope}
@@ -666,68 +800,93 @@ def _handle_approver_turn(
         })
         if not res.get("ok"):
             state.finish("failed_validation")
-            return "REJECT_SAFETY", "failed_validation", "", [], "Requested policy category is outside your Approver scope.", state
+            err = "Danh mục chính sách yêu cầu nằm ngoài phạm vi phê duyệt của bạn." if is_vi else "Requested policy category is outside your Approver scope."
+            return "REJECT_SAFETY", "failed_validation", "", [], err, state
         state.finish("completed")
-        text, cits = _format_policy_qa(res["data"], "detailed")
+        text, cits = _format_policy_qa(res["data"], "detailed", is_vi=is_vi)
         return "SELF_SERVE", "completed", text, cits, "", state
 
     read_tool = "get_itinerary" if action_type == "escalation" else "get_trip_request"
     res = run_tool(state, read_tool, {"trip_id": trip_id})
     if not res.get("ok"):
         state.finish("failed_validation")
-        return "REJECT_SAFETY", "failed_validation", "", [], "Requested trip is outside your active pending approval scope.", state
+        err = "Chuyến đi yêu cầu nằm ngoài phạm vi phê duyệt đang chờ của bạn." if is_vi else "Requested trip is outside your active pending approval scope."
+        return "REJECT_SAFETY", "failed_validation", "", [], err, state
 
+    header = f"[APPROVER XEM XÉT THEO PHẠM VI | {trip_id} ({action_type})]" if is_vi else f"[APPROVER SCOPED REVIEW | {trip_id} ({action_type})]"
+    facts_title = "Dữ kiện chỉ đọc theo phạm vi (Scoped Read-Only Facts):" if is_vi else "Scoped Read-Only Facts:"
     lines = [
-        f"[APPROVER SCOPED REVIEW | {trip_id} ({action_type})]",
+        header,
         "",
-        "Scoped Read-Only Facts:",
+        facts_title,
     ]
     data = res["data"]
     if read_tool == "get_trip_request":
-        lines.extend([
-            f"  - Traveler: {data.get('traveler_id', 'Unknown')}",
-            f"  - Route: {data.get('origin')} ({data.get('origin_airport', 'HAN')}) -> {data.get('destination')}",
-            f"  - Dates: {data.get('start_date')} to {data.get('end_date')}",
-            f"  - Purpose: {data.get('purpose')}",
-            f"  - Trip Status: {_human_trip_status(data.get('travel_status'))}",
-        ])
+        if is_vi:
+            lines.extend([
+                f"  - Traveler: {data.get('traveler_id', 'Unknown')}",
+                f"  - Route: {data.get('origin')} ({data.get('origin_airport', 'HAN')}) -> {data.get('destination')}",
+                f"  - Dates: {data.get('start_date')} đến {data.get('end_date')}",
+                f"  - Purpose: {data.get('purpose')}",
+                f"  - Trip Status: {_human_trip_status(data.get('travel_status'))}",
+            ])
+        else:
+            lines.extend([
+                f"  - Traveler: {data.get('traveler_id', 'Unknown')}",
+                f"  - Route: {data.get('origin')} ({data.get('origin_airport', 'HAN')}) -> {data.get('destination')}",
+                f"  - Dates: {data.get('start_date')} to {data.get('end_date')}",
+                f"  - Purpose: {data.get('purpose')}",
+                f"  - Trip Status: {_human_trip_status(data.get('travel_status'))}",
+            ])
         app_res = run_tool(state, "get_approval_status", {"trip_id": trip_id})
         if app_res.get("ok"):
-            lines.append(f"  - Approval Status: {app_res['data'].get('trip_approval_status')}")
+            lines.append(f"  - Trạng thái phê duyệt (Approval Status): {app_res['data'].get('trip_approval_status')}" if is_vi else f"  - Approval Status: {app_res['data'].get('trip_approval_status')}")
     else:
         flight = data.get("flight", {})
         disruption = data.get("disruption")
-        lines.extend([
-            f"  - Flight: {flight.get('flight_id')} | {flight.get('origin')} -> {flight.get('destination')}",
-            f"  - Schedule: {_fmt_iso_dt(flight.get('departure'))} to {_fmt_iso_dt(flight.get('arrival'))}",
-            f"  - Flight Status: {_human_flight_status(flight.get('status'), disruption)}",
-        ])
-    lines.extend(["", "Boundary Notice: Approver agent view is strictly read-only; decisions occur outside agent tools."])
+        if is_vi:
+            lines.extend([
+                f"  - Flight: {flight.get('flight_id')} | {flight.get('origin')} -> {flight.get('destination')}",
+                f"  - Schedule: {_fmt_iso_dt(flight.get('departure'))} đến {_fmt_iso_dt(flight.get('arrival'))}",
+                f"  - Flight Status: {_human_flight_status(flight.get('status'), disruption)}",
+            ])
+        else:
+            lines.extend([
+                f"  - Flight: {flight.get('flight_id')} | {flight.get('origin')} -> {flight.get('destination')}",
+                f"  - Schedule: {_fmt_iso_dt(flight.get('departure'))} to {_fmt_iso_dt(flight.get('arrival'))}",
+                f"  - Flight Status: {_human_flight_status(flight.get('status'), disruption)}",
+            ])
+    notice = (
+        "Thông báo ranh giới (Boundary Notice): Giao diện agent dành cho Approver chỉ đọc; quyết định phê duyệt diễn ra bên ngoài các công cụ agent."
+        if is_vi
+        else "Boundary Notice: Approver agent view is strictly read-only; decisions occur outside agent tools."
+    )
+    lines.extend(["", notice])
     state.finish("completed")
     return "SELF_SERVE", "completed", "\n".join(lines), [], "", state
 
 
-def _handoff_reason_for_workflow(outcome: str, result: dict[str, Any]) -> str:
+def _handoff_reason_for_workflow(outcome: str, result: dict[str, Any], is_vi: bool = False) -> str:
     if outcome == "awaiting_approval":
-        return "Trip approval is pending; human approval is required."
+        return "Chuyến đi đang chờ phê duyệt; cần có sự phê duyệt của con người." if is_vi else "Trip approval is pending; human approval is required."
     if outcome == "failed_budget":
-        return "Execution reached step budget limit; escalated for staff review."
+        return "Thực thi đạt giới hạn ngân sách bước (step budget limit); chuyển tiếp nhân viên xem xét." if is_vi else "Execution reached step budget limit; escalated for staff review."
     if outcome == "partial":
-        return f"Workflow did not complete cleanly ({result.get('error_code', 'partial_execution')})."
+        return f"Quy trình không hoàn tất trọn vẹn ({result.get('error_code', 'partial_execution')})." if is_vi else f"Workflow did not complete cleanly ({result.get('error_code', 'partial_execution')})."
     validation = result.get("validation")
     if isinstance(validation, dict):
         if validation.get("blocking"):
-            return f"Blocking travel/approval status: {', '.join(validation['blocking'])}."
+            return f"Trạng thái chuyến đi / phê duyệt bị chặn (blocking): {', '.join(validation['blocking'])}." if is_vi else f"Blocking travel/approval status: {', '.join(validation['blocking'])}."
         if validation.get("missing_policy_categories"):
-            return f"Missing required policy evidence for categories: {', '.join(validation['missing_policy_categories'])}."
+            return f"Thiếu căn cứ chính sách bắt buộc cho các danh mục: {', '.join(validation['missing_policy_categories'])}." if is_vi else f"Missing required policy evidence for categories: {', '.join(validation['missing_policy_categories'])}."
     review = result.get("review_preview")
     if isinstance(review, dict):
         if review.get("version_conflicts"):
-            return "Active policy version conflict requires staff reviewer resolution."
+            return "Xung đột phiên bản chính sách hiệu lực cần nhân viên giải quyết." if is_vi else "Active policy version conflict requires staff reviewer resolution."
         summary = review.get("summary", {})
         if isinstance(summary, dict) and summary.get("threshold_flags"):
-            return "Expense items exceed or conflict with active policy limits."
-    return result.get("message", "Human Travel Operations staff review is required.")
+            return "Các khoản chi phí vượt quá hoặc xung đột với giới hạn chính sách." if is_vi else "Expense items exceed or conflict with active policy limits."
+    return result.get("message", "Cần nhân viên Vận hành Du lịch xem xét." if is_vi else "Human Travel Operations staff review is required.")
 
 
 # Conversational Orchestrator (Mục 5, 8, 9, 11): Điều phối phiên thoại đa lượt qua 4 luồng nghiệp vụ chuẩn.
@@ -747,6 +906,8 @@ def handle_turn(
     output_format = "concise"
     if user["role"] in {"Employee", "Reviewer", "Approver"}:
         output_format = get_preferences(user_context).get("preferred_output_format", "concise")
+
+    is_vi = _is_vietnamese(message, user_context)
 
     decision = _resolve_with_session(route_message_intent(message), user_context, message)
 
@@ -771,18 +932,23 @@ def handle_turn(
         state.finish("failed_validation")
         outcome = "failed_validation"
         bot_response = (
-            "Unauthorized for Admin role: Admin only has read-only trip overview (`list all trips`) "
-            "and audit history (`show audit log`), and cannot run workflows or search policy."
+            "Từ chối quyền đối với vai trò Admin: Admin chỉ có quyền xem tổng quan chuyến đi chỉ đọc (`danh sách chuyến đi`) "
+            "và lịch sử kiểm toán (`nhật ký kiểm toán`), không được phép chạy quy trình hoặc tìm kiếm chính sách."
+            if is_vi
+            else (
+                "Unauthorized for Admin role: Admin only has read-only trip overview (`list all trips`) "
+                "and audit history (`show audit log`), and cannot run workflows or search policy."
+            )
         )
         _audit_chat_event(user, state, decision.trip_id, decision.report_id, "admin_boundary_enforced")
     elif user["role"] == "Approver" and intent not in {"greeting", "safety_adversarial", "handoff_requested"}:
         route, outcome, bot_response, citations, handoff_reason, state = _handle_approver_turn(
-            user, user_context, decision, approval_scope
+            user, user_context, decision, approval_scope, is_vi=is_vi
         )
         if route == "HANDOFF_STAFF":
             handoff_required = True
             handoff_id = f"HND-{uuid4().hex[:8].upper()}"
-            bot_response = _format_handoff_response(handoff_id, handoff_reason, "", citations, output_format)
+            bot_response = _format_handoff_response(handoff_id, handoff_reason, "", citations, output_format, is_vi=is_vi)
         _audit_chat_event(user, state, decision.trip_id, decision.report_id, "approver_scoped_turn")
     elif route == "REJECT_SAFETY":
         state = RunState("pretrip", user_context, phase="safety_guard")
@@ -800,16 +966,23 @@ def handle_turn(
             "safety_event": "unsafe_or_invalid_user_input",
         })
         state.finish(outcome)
-        bot_response = (
-            "Invalid ID format. Expected TRIP-YYYY-NNN or EXP-YYYY-NNN."
-            if intent == "invalid_id"
-            else "Request rejected by safety policy: rule-bypass, bulk-override, or forbidden instruction patterns are not allowed."
-        )
+        if intent == "invalid_id":
+            bot_response = (
+                "Định dạng ID không hợp lệ. Kỳ vọng TRIP-YYYY-NNN hoặc EXP-YYYY-NNN."
+                if is_vi
+                else "Invalid ID format. Expected TRIP-YYYY-NNN or EXP-YYYY-NNN."
+            )
+        else:
+            bot_response = (
+                "Yêu cầu bị từ chối bởi chính sách an toàn: Không cho phép hành vi vượt quyền quy tắc (rule-bypass), ghi đè hàng loạt (bulk-override) hoặc chỉ thị bị cấm."
+                if is_vi
+                else "Request rejected by safety policy: rule-bypass, bulk-override, or forbidden instruction patterns are not allowed."
+            )
         _audit_chat_event(user, state, decision.trip_id, decision.report_id, "safety_guard_rejected")
 
     elif route == "SELF_SERVE" and intent == "admin_overview":
         workflow_name = "admin"
-        route, bot_response, state = _handle_admin_overview(user, user_context, decision)
+        route, bot_response, state = _handle_admin_overview(user, user_context, decision, is_vi=is_vi)
         outcome = state.outcome or "completed"
         _audit_chat_event(user, state, decision.trip_id, decision.report_id, "admin_overview")
 
@@ -820,29 +993,47 @@ def handle_turn(
         if user["role"] in {"Employee", "Reviewer", "Approver"} and intent in {"pretrip", "intrip", "posttrip"}:
             set_session_value(user_context, "last_workflow", intent)
             set_session_value(user_context, "pending_slot", "report_id" if intent == "posttrip" else "trip_id")
-        bot_response = (
-            "Please provide the expense report ID (EXP-YYYY-NNN) or destination/date so I can review it."
-            if intent == "posttrip"
-            else "Please provide the trip ID (TRIP-YYYY-NNN), destination, or travel date so I can assist you."
-        )
+        if intent == "posttrip":
+            bot_response = (
+                "Vui lòng cung cấp mã báo cáo chi phí (EXP-YYYY-NNN) hoặc điểm đến/ngày để tôi kiểm tra."
+                if is_vi
+                else "Please provide the expense report ID (EXP-YYYY-NNN) or destination/date so I can review it."
+            )
+        else:
+            bot_response = (
+                "Vui lòng cung cấp mã chuyến đi (TRIP-YYYY-NNN), điểm đến hoặc ngày khởi hành để tôi hỗ trợ."
+                if is_vi
+                else "Please provide the trip ID (TRIP-YYYY-NNN), destination, or travel date so I can assist you."
+            )
         _audit_chat_event(user, state, None, None, "clarification_requested")
 
     elif route == "SELF_SERVE" and intent == "greeting":
         state = RunState("pretrip", user_context, phase="direct_reply")
         state.finish("completed")
         outcome = "completed"
-        bot_response = (
-            f"Hello ({user['user_id']} · {user['role']})!\n\n"
-            "I can help with:\n"
-            "  - Pre-trip checklists & compliance (mention a destination, date, or TRIP-ID)\n"
-            "  - In-trip flight delay / cancellation guidance\n"
-            "  - Post-trip expense report pre-checks\n"
-            "  - Grounded travel policy Q&A with corpus citations\n"
-            "  - Your output preferences (concise / detailed)"
-        )
+        if is_vi:
+            bot_response = (
+                f"Xin chào ({user['user_id']} · {user['role']})!\n\n"
+                "Tôi có thể hỗ trợ bạn:\n"
+                "  - Danh sách checklist & tuân thủ trước chuyến đi (Pre-trip: nhập điểm đến, ngày hoặc TRIP-ID)\n"
+                "  - Hướng dẫn xử lý hoãn / hủy chuyến bay trong chuyến đi (In-trip)\n"
+                "  - Kiểm toán và rà soát báo cáo chi phí sau chuyến đi (Post-trip)\n"
+                "  - Tra cứu chính sách công tác có trích dẫn nguồn xác thực (Policy Q&A)\n"
+                "  - Tùy chỉnh định dạng phản hồi (ngắn gọn / chi tiết)"
+            )
+        else:
+            bot_response = (
+                f"Hello ({user['user_id']} · {user['role']})!\n\n"
+                "I can help with:\n"
+                "  - Pre-trip checklists & compliance (mention a destination, date, or TRIP-ID)\n"
+                "  - In-trip flight delay / cancellation guidance\n"
+                "  - Post-trip expense report pre-checks\n"
+                "  - Grounded travel policy Q&A with corpus citations\n"
+                "  - Your output preferences (concise / detailed)"
+            )
 
     elif route == "SELF_SERVE" and intent == "preference" and decision.preference_cmd:
-        bot_response, state = _handle_preference(user_context, decision.preference_cmd)
+        bot_response, state = _handle_preference(user_context, decision.preference_cmd, is_vi=is_vi)
         outcome = state.outcome or "completed"
         workflow_name = "preference"
         _audit_chat_event(user, state, None, None, "preference_operation")
@@ -868,19 +1059,31 @@ def handle_turn(
             handoff_required = True
             handoff_id = f"HND-{uuid4().hex[:8].upper()}"
             if not res.get("ok"):
-                handoff_reason = f"Policy search failed or is outside role scope ({res.get('error', {}).get('code', 'error')})."
+                handoff_reason = (
+                    f"Tìm kiếm chính sách thất bại hoặc ngoài phạm vi vai trò ({res.get('error', {}).get('code', 'error')})."
+                    if is_vi
+                    else f"Policy search failed or is outside role scope ({res.get('error', {}).get('code', 'error')})."
+                )
             elif top_has_conflict:
-                handoff_reason = "Active policy version conflict detected; requires human staff decision."
+                handoff_reason = (
+                    "Phát hiện xung đột phiên bản chính sách; cần quyết định của nhân viên."
+                    if is_vi
+                    else "Active policy version conflict detected; requires human staff decision."
+                )
                 for conflict in data["version_conflicts"]:
                     if conflict.get("doc_id") == results[0].get("doc_id"):
                         citations.extend(v["citation"] for v in conflict.get("versions", []) if isinstance(v.get("citation"), str))
             else:
-                handoff_reason = "No matching policy evidence found in the corpus."
-            bot_response = _format_handoff_response(handoff_id, handoff_reason, "", citations, output_format)
+                handoff_reason = (
+                    "Không tìm thấy căn cứ chính sách phù hợp trong kho dữ liệu."
+                    if is_vi
+                    else "No matching policy evidence found in the corpus."
+                )
+            bot_response = _format_handoff_response(handoff_id, handoff_reason, "", citations, output_format, is_vi=is_vi)
         else:
             state.finish("completed")
             outcome = "completed"
-            bot_response, citations = _format_policy_qa(data, output_format)
+            bot_response, citations = _format_policy_qa(data, output_format, is_vi=is_vi)
             if user["role"] in {"Employee", "Reviewer", "Approver"}:
                 set_session_value(user_context, "last_workflow", "policy_qa")
         _audit_chat_event(user, state, None, None, "policy_qa")
@@ -892,7 +1095,7 @@ def handle_turn(
                   else ("pretrip" if intent == "mixed" else intent))
         )
         workflow_name = wf
-        resolved_trip, resolved_report, clarify_msg = _resolve_natural_record(decision, wf, user_context)
+        resolved_trip, resolved_report, clarify_msg = _resolve_natural_record(decision, wf, user_context, is_vi=is_vi)
         if clarify_msg:
             route = "CLARIFY"
             outcome = "needs_input"
@@ -938,12 +1141,16 @@ def handle_turn(
                 p_conflicts = {c.get("doc_id") for c in p_data.get("version_conflicts", [])}
                 p_top_conflict = bool(p_results and p_results[0].get("doc_id") in p_conflicts)
                 if not p_res.get("ok") or p_data.get("no_result") or not p_results or p_top_conflict:
-                    policy_handoff_reason = "Secondary policy question has conflicting or missing corpus evidence."
+                    policy_handoff_reason = (
+                        "Câu hỏi chính sách phụ có bằng chứng xung đột hoặc thiếu dữ liệu trong kho."
+                        if is_vi
+                        else "Secondary policy question has conflicting or missing corpus evidence."
+                    )
                     for conflict in p_data.get("version_conflicts", []):
                         if not p_results or conflict.get("doc_id") == p_results[0].get("doc_id"):
                             citations.extend(v["citation"] for v in conflict.get("versions", []) if isinstance(v.get("citation"), str))
                 else:
-                    p_text, p_cits = _format_policy_qa(p_data, "concise")
+                    p_text, p_cits = _format_policy_qa(p_data, "concise", is_vi=is_vi)
                     policy_note = p_text
                     citations = list(dict.fromkeys([*citations, *p_cits]))
 
@@ -961,12 +1168,16 @@ def handle_turn(
 
             if result_payload.get("error_code") == "unauthorized_scope":
                 route = "REJECT_SAFETY"
-                bot_response = "Request denied: the requested record is outside your authorized scope."
+                bot_response = (
+                    "Yêu cầu bị từ chối: Bản ghi được yêu cầu nằm ngoài phạm vi ủy quyền của bạn."
+                    if is_vi
+                    else "Request denied: the requested record is outside your authorized scope."
+                )
             elif outcome == "completed" and not policy_handoff_reason:
-                bot_response = _format_workflow_success(wf, result_payload, citations, output_format, policy_note=policy_note)
+                bot_response = _format_workflow_success(wf, result_payload, citations, output_format, policy_note=policy_note, is_vi=is_vi)
             elif outcome == "needs_input":
                 route = "CLARIFY"
-                bot_response = _format_clarify_workflow(wf, result_payload, output_format)
+                bot_response = _format_clarify_workflow(wf, result_payload, output_format, is_vi=is_vi)
             elif outcome == "failed_validation":
                 route = "REJECT_SAFETY"
                 bot_response = result_payload.get("message", "Validation failed.")
@@ -974,9 +1185,9 @@ def handle_turn(
                 route = "HANDOFF_STAFF"
                 handoff_required = True
                 handoff_id = f"HND-{uuid4().hex[:8].upper()}"
-                handoff_reason = policy_handoff_reason or _handoff_reason_for_workflow(outcome, result_payload)
+                handoff_reason = policy_handoff_reason or _handoff_reason_for_workflow(outcome, result_payload, is_vi=is_vi)
                 bot_response = _format_handoff_response(
-                    handoff_id, handoff_reason, facts_summary, citations, output_format, result=result_payload
+                    handoff_id, handoff_reason, facts_summary, citations, output_format, result=result_payload, is_vi=is_vi
                 )
             _audit_chat_event(user, state, resolved_trip, resolved_report, "workflow_terminal_outcome")
 
@@ -984,7 +1195,7 @@ def handle_turn(
         route = "HANDOFF_STAFF"
         handoff_required = True
         handoff_id = f"HND-{uuid4().hex[:8].upper()}"
-        handoff_reason = decision.reason or "Escalated to Travel Operations Staff."
+        handoff_reason = decision.reason or ("Chuyển tiếp đến nhân viên Vận hành Du lịch (Travel Operations Staff)." if is_vi else "Escalated to Travel Operations Staff.")
         state = RunState("pretrip", user_context, phase="staff_handoff")
         state.finish("needs_human")
         outcome = "needs_human"
@@ -993,7 +1204,7 @@ def handle_turn(
             _enrich_trip_and_traveler(handoff_ctx_result, user, user_context, decision.trip_id)
         facts_summary = _verified_facts(handoff_ctx_result, decision.trip_id, decision.report_id)
         bot_response = _format_handoff_response(
-            handoff_id, handoff_reason, facts_summary, citations, output_format, result=handoff_ctx_result
+            handoff_id, handoff_reason, facts_summary, citations, output_format, result=handoff_ctx_result, is_vi=is_vi
         )
         _audit_chat_event(user, state, decision.trip_id, decision.report_id, "staff_handoff")
 

@@ -11,6 +11,11 @@ _REWRITE_MAP: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\bflight\s+postponed\b", re.IGNORECASE), "flight delay notice policy"),
     (re.compile(r"\bentry\s+permit\b", re.IGNORECASE), "visa requirements entry authorization"),
     (re.compile(r"\bhealth\s+coverage\b", re.IGNORECASE), "business travel medical insurance policy"),
+    (re.compile(r"\b(?:an\s+uong|bua\s+an|tien\s+an)\b", re.IGNORECASE), "meals daily allowance cap"),
+    (re.compile(r"\b(?:khach\s+san|tien\s+phong)\b", re.IGNORECASE), "lodging nightly cap rate"),
+    (re.compile(r"\b(?:tre\s+chuyen|hoan\s+chuyen|huy\s+chuyen)\b", re.IGNORECASE), "flight delay notice policy"),
+    (re.compile(r"\b(?:thi\s+thuc|nhap\s+canh)\b", re.IGNORECASE), "visa requirements entry authorization"),
+    (re.compile(r"\b(?:bao\s+hiem|y\s+te)\b", re.IGNORECASE), "business travel medical insurance policy"),
 ]
 
 
@@ -26,10 +31,16 @@ def rewrite_query(
     if already_rewritten or not isinstance(query, str) or not query.strip():
         return query, False
 
+    from travel_agent.nlu import _unaccent
     rewritten = query
+    unaccented = _unaccent(rewritten)
     for pattern, replacement in _REWRITE_MAP:
         if pattern.search(rewritten):
             rewritten = pattern.sub(replacement, rewritten)
+        elif pattern.search(unaccented):
+            # Substitute matching segment or append canonical terms
+            rewritten = f"{rewritten} {replacement}"
+            break
 
     if rewritten != query:
         if state is not None and hasattr(state, "record_event"):
