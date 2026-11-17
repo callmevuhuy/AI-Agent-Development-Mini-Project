@@ -1,15 +1,16 @@
-# Project quick start
+# Mục lục tài liệu dự án
 
-Run commands from the repository root. See the root `README.md` for full setup, roles, environment variables, and limitations.
+Đọc yêu cầu gốc trong `Requirement Docs/` trước khi thay đổi hành vi.
 
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python -m travel_agent.app message --user U-EMP-002 --text "My flight to Tokyo on Dec 8 is delayed, what should I do?"
-python -m travel_agent.app web --port 8080
-python -m pytest -v
-python eval/run_eval.py --label after
-```
+| Tệp | Nội dung |
+|---|---|
+| `AGENTS.md` | Hợp đồng agent và quy tắc triển khai |
+| `ARCHITECTURE.md` | Kiến trúc tổng thể và ba quy trình |
+| `WORKFLOWS.md` | Các bước, điều kiện dừng và kết quả |
+| `TOOL_CARDS.md` | Đặc tả công cụ, arguments và hợp đồng kết quả |
+| `DATA_SPEC.md` | Cấu trúc và tình huống dữ liệu giả lập |
+| `MEMORY_AND_SAFETY.md` | Memory, quyền và ranh giới an toàn |
+| `TEST_MATRIX.md` | Ma trận kiểm thử và tiêu chí đánh giá |
+| `PLAN.md` | Kế hoạch, quyết định thiết kế và trạng thái |
 
-The offline NLU router and BM25 retriever are deterministic; no LLM or API key is configured. All systems and records are mock data.
+NLU và BM25 chạy bằng quy tắc xác định, không có LLM hay API key bên ngoài. Tất cả hệ thống và hồ sơ nghiệp vụ đều là giả lập. Tài liệu dùng tiếng Việt; định danh kỹ thuật giữ nguyên để đối chiếu mã nguồn.

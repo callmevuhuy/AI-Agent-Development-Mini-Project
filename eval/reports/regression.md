@@ -1,13 +1,13 @@
-# Regression report
+# Báo cáo kiểm tra hồi quy
 
-The baseline is the first recorded evaluation after the implementation work. No earlier numeric benchmark was archived, so this compares that baseline with the post-fix verification run rather than claiming a historical pre-change improvement.
+Baseline là lần đo đầu tiên được lưu sau khi triển khai. Không có số đo cũ hơn để khẳng định mức cải thiện trước triển khai; báo cáo chỉ so sánh baseline đã lưu với lần kiểm tra sau sửa.
 
-- Baseline: 31/31 passed.
-- After: 31/31 passed.
-- Regressions: 0; improvements: 0; new cases: 0; removed cases: 0.
-- Changed cases: regressions=none, improvements=none, new=none, removed=none.
+- Ban đầu: 31/31 ca đạt.
+- Sau sửa: 31/31 ca đạt.
+- Hồi quy: 0; cải thiện: 0; ca mới: 0; ca đã bỏ: 0.
+- Chi tiết thay đổi: hồi quy=không có, cải thiện=không có, mới=không có, bỏ=không có.
 
-| Metric | Baseline | After | Delta |
+| Chỉ số kỹ thuật | Ban đầu | Sau sửa | Chênh lệch |
 |---|---:|---:|---:|
 | case_count | 31 | 31 | 0 |
 | passed | 31 | 31 | 0 |

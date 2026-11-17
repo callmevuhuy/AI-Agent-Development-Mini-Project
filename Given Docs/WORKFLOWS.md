@@ -1,87 +1,76 @@
-# WORKFLOWS
+# Đặc tả các quy trình
 
-Terminal outcomes: `completed | needs_input | needs_human | awaiting_approval | partial | failed_validation | failed_delivery | failed_budget`.
-Draft lifecycle: `draft_created -> awaiting_approval -> approved -> publish_requested -> published` (trong project không có `published` thật). `delivery_status` luôn `not_sent` / `not_published`.
+## Trạng thái và nguồn dữ liệu
 
-## Định nghĩa trạng thái (tránh nhầm lẫn)
-- `trip_approval_status`: trạng thái duyệt chuyến từ approval system (`pending | approved | rejected`).
-- `approval_request_status`: trạng thái review trong `approval_requests.json`; tool chỉ tạo pending, còn decision do mock external helper cập nhật.
-- `draft_status`: vòng đời artifact (`draft_created -> awaiting_approval -> approved -> publish_requested -> published`).
-- Terminal outcome `awaiting_approval` chỉ dùng khi có approval request đang `pending` thật (trip pending hoặc `request_approval` vừa tạo).
-- `request_approval` chỉ được gọi tường minh bởi Employee cho trip của chính user; tool chỉ tạo `pending`, không bao giờ trả `approved`.
+Các kết quả cuối: `completed | needs_input | needs_human | awaiting_approval | partial | failed_validation | failed_delivery | failed_budget`.
 
-## Run state (bắt buộc)
-`run_id, workflow, phase, user_id, role, session_id, step_count, max_steps, safe_tool_results, trace[], outcome`
+`trip_approval_status` lấy từ `approvals.json`. Trạng thái yêu cầu review trong `approval_requests.json` được quản lý riêng. Tool chỉ tạo pending; quyết định thuộc helper mô phỏng bên ngoài tool set. Draft có `draft_status=draft_created`, `delivery_status=not_sent|not_published`. Các bước vòng đời tương lai như `publish_requested` và `published` chưa được triển khai thật.
 
-`step_count` tăng một lần cho mỗi lần gọi dispatcher; retry cũng tiêu thụ một bước. Mọi call đi qua `run_tool`; chỉ retry lỗi có `retryable: true`, tối đa 2 lần. Khi hết budget, dừng với `failed_budget`. Trace chỉ lưu ID đã kiểm tra, category, độ dài query, trạng thái/result code và source; không lưu raw query, action summary, session ID hoặc tool output.
+Một run giữ `run_id, workflow, phase, user_context, step_count, max_steps, safe_tool_results, trace, outcome`. Mỗi lần thử gọi tool tăng số bước; chỉ lỗi retryable được retry tối đa hai lần. Hết budget dừng `failed_budget`. Trace giữ tham số đã lọc, mã/thông báo lỗi an toàn và kết quả; không giữ raw query hoặc bí mật.
 
-## Retrieval routing
+## Định tuyến theo nhu cầu
+
 | Nhu cầu | Xử lý |
 |---|---|
-| Greeting / viết lại text có sẵn | Trả lời trực tiếp |
-| Status trip/itinerary/approval | Mock read tool |
-| Claim về policy | `search_travel_policy` |
-| Thiếu ID | `needs_input` hỏi lại |
-| Facts live + policy | Facts trước, retrieval có điều kiện |
+| Lời chào | Trả đúng chức năng của role hiện tại |
+| Dữ kiện chuyến/hành trình/duyệt | Tool đọc mock, không dùng memory làm nguồn dữ kiện |
+| Chính sách | `search_travel_policy`, có căn cứ và citation |
+| Thiếu hoặc nhiều ID phù hợp | Hỏi lại bằng `needs_input` |
+| Dữ kiện kèm chính sách | Lấy dữ kiện trước, tra policy có điều kiện |
+| Tạo yêu cầu phê duyệt | Chỉ khi Employee yêu cầu tường minh |
+| Ra quyết định phê duyệt | Từ chối thao tác qua chat với thông báo riêng theo role |
 
-Policy search chạy BM25 offline và trả `results`, `no_result`, citations, `version_conflicts`, `resolved_versions` và danh sách chunk injection đã loại. Claim dạng policy chỉ được xuất nếu `check_claim` tìm thấy đủ terms trong cùng một câu trusted evidence, polarity trùng khớp; nếu không thì không phát biểu claim. Đây là lexical baseline, chưa phải semantic entailment.
+## A. Chuẩn bị trước chuyến đi
 
-## A — Pre-trip Planning and Compliance
-Allowlist: `get_trip_request, get_approval_status, get_traveler_profile, list_my_trips, search_travel_policy, validate_trip_requirements, create_travel_checklist_draft, request_approval` (plus scoped preference tools)
-```
-1  validate trip_id (regex)            -> fail: failed_validation / thiếu: needs_input
-2  get_trip_request                    -> not found: failed_validation(unknown_id)
-3  validator obtains trip approval status from the approval source
-4  search_travel_policy(destination, category)  (<=1 rewrite, top_k<=5)
-5  validate_trip_requirements(facts, evidence)  [deterministic theo requirements.json: field đủ? approval? category evidence đủ?]
-6  create_travel_checklist_draft(trip_id, checklist) [idempotent; stable draft_id]
-7  outcome:
-   - field thiếu            -> needs_input
-   - approval pending       -> awaiting_approval (checklist vẫn draft, không nói "đã duyệt")
-   - approval rejected      -> needs_human
-   - evidence không đủ      -> needs_human + limitation
-   - approved + evidence ok -> completed
-```
-Rules: chỉ claim policy khi có citation; không nói "đã duyệt" nếu source chưa `approved`.
+Allowlist: `get_trip_request`, `get_approval_status`, `get_traveler_profile`, `list_my_trips`, `search_travel_policy`, `validate_trip_requirements`, `create_travel_checklist_draft`, `request_approval` và các tool preference.
 
-## B — In-trip Disruption Support
-Allowlist: `get_itinerary, get_traveler_profile, list_my_trips, search_travel_policy, create_escalation_or_support_draft, request_approval` (plus scoped preference tools)
-```
-1  validate trip_id
-2  get_itinerary
-3  xác định disruption từ observation (delay/cancel) — không suy đoán nếu field không có
-4  search_travel_policy (emergency/disruption guidance) khi cần
-5  create_escalation_or_support_draft (tách "Itinerary facts" và "Policy guidance", idempotent)
-6  outcome: completed (guidance đủ) | needs_human (policy thiếu / cancelled / cần chi tiền, đổi vé)
-```
-Rules: không đổi vé, đặt khách sạn, chi tiền hay gửi request. Action-like/cancelled/missing guidance -> `needs_human`.
+1. Kiểm tra ID: thiếu → `needs_input`; sai định dạng → `failed_validation`.
+2. Lấy chuyến bằng `get_trip_request`; không tồn tại → `not_found`; ngoài quyền → từ chối scope.
+3. Kiểm tra trường bắt buộc; lấy trạng thái duyệt bằng `get_approval_status`.
+4. Chặn sớm chuyến hủy hoặc phê duyệt bị từ chối → `needs_human`.
+5. Tra các danh mục policy bắt buộc theo điểm đến, tối đa 5 kết quả mỗi lần.
+6. Gọi `validate_trip_requirements` với facts và evidence; tạo checklist draft khi đủ điều kiện lưu.
+7. Kết quả: đủ dữ liệu/evidence và nguồn approved → `completed`; pending thật → `awaiting_approval`; thiếu trường → `needs_input`; thiếu căn cứ hoặc xung đột → `needs_human`.
 
-## C — Post-trip Expense Pre-check
-Allowlist: `get_expense_report, get_traveler_profile, list_my_trips, list_my_expenses, calculate_expense_summary, search_travel_policy, create_expense_review_draft` (plus scoped preference tools)
-```
-1  validate report_id
-2  get_expense_report
-3  deterministic validation (receipt thiếu, field thiếu) + calculate_expense_summary (tổng, tỉ lệ, cờ vượt ngưỡng)
-4  search_travel_policy theo từng category liên quan
-5  create_expense_review_draft (facts + policy evidence + items cần reviewer kiểm tra, idempotent)
-6  outcome: completed | needs_input (thiếu chứng từ/field) | needs_human (vượt ngưỡng / policy conflict)
-```
-Rules: LLM không tự tính; không kết luận "được hoàn tiền"/"đã phê duyệt".
+Không khẳng định đã duyệt nếu nguồn chưa trả approved. Lỗi lookup phụ đã được workflow xử lý không được ghi đè lý do dừng nghiệp vụ.
 
-Các workflow A/B/C lưu artifact vào `data/drafts/` bằng `draft_id` ổn định theo `(workflow, source_id)`; retry cập nhật cùng artifact. Draft chỉ là sandbox, `delivery_status` luôn `not_sent` hoặc `not_published`. Workflow không tạo approval request ngầm; Employee chỉ tạo request khi yêu cầu rõ ràng qua `request_approval`.
+## B. Hỗ trợ sự cố trong chuyến đi
 
-## Stop conditions chung
-- `step_count >= max_steps` -> `failed_budget`.
-- Tool lỗi `retryable` -> retry tối đa 2, hết -> `partial` hoặc `failed_validation` theo bước.
-- Bước sau fail nhưng draft trước đã tạo -> `partial` (không báo success chung chung).
+Allowlist: `get_itinerary`, `get_traveler_profile`, `list_my_trips`, `search_travel_policy`, `create_escalation_or_support_draft`, `request_approval` và các tool preference.
 
-## Approval request and Admin review
-- `request_approval(trip_id, action_type, action_summary)` is Employee-only and trip-owner scoped. Repeated `(trip_id, action_type)` returns the existing request; it never approves, rejects, sends, or publishes.
-- Admin workflow exposes only `admin_list_trips` and `admin_get_audit_history`, both read-only. Audit history includes safe workflow outcomes, approval request creation, and external mock decision events with a structured reason.
-- Policy search filters each chunk by `allowed_roles` before ranking. Approver needs a pending `approval_scope`; `checklist_review` may search approval/travel/visa/insurance, `escalation` may search travel, and `publish_request` may search approval. Admin cannot search policy.
+1. Kiểm tra ID và quyền.
+2. Đọc itinerary, xác định sự cố từ observation; không suy đoán trường không có.
+3. Không có sự cố → báo kết quả theo nguồn. Có hoãn/hủy → tra policy hỗ trợ.
+4. Tạo bản nháp, tách dữ kiện hành trình khỏi hướng dẫn chính sách có căn cứ.
+5. Hướng dẫn đủ → `completed`; hủy chuyến, thiếu hướng dẫn hoặc cần quyết định ngoài thẩm quyền → `needs_human`.
 
-## Conversational 4-Flow Routing (`nlu.py` + `conversation.py`)
-- `SELF_SERVE`: Direct greeting, grounded policy Q&A, preference management, Admin read-only views, or workflows A/B/C resolved by ID or natural destination/date (`list_my_trips`, `list_my_expenses`, flight-date check via `get_itinerary`).
-- `CLARIFY`: Multi-trip ambiguity, unmatched date/destination, or missing fields/receipts (`needs_input`) with structured checklist/review status breakdown.
-- `HANDOFF_STAFF`: Unresolvable policy gaps/conflicts, pending/rejected approval, cancelled flight, or forbidden/out-of-scope requests — uses fixed template `[HANDOFF TO STAFF | Ticket: HND-...]` with verified facts only and logs to `handoff_queue.csv`.
-- `REJECT_SAFETY`: Prompt injection, malformed IDs, or unauthorized role/record scope rejected prior to execution.
+## C. Rà soát chi phí sau chuyến đi
+
+Allowlist: `get_expense_report`, `get_traveler_profile`, `list_my_trips`, `list_my_expenses`, `calculate_expense_summary`, `search_travel_policy`, `create_expense_review_draft` và các tool preference.
+
+1. Kiểm tra ID và quyền; đọc báo cáo.
+2. Tool tính tổng, tỷ lệ, cờ ngưỡng, chứng từ và trường thiếu.
+3. Tra policy chỉ cho những danh mục thực sự có trong báo cáo.
+4. Tạo draft với facts, căn cứ và mục cần Reviewer xem xét.
+5. Kết quả: hợp lệ → `completed`; thiếu thông tin/chứng từ → `needs_input`; vượt ngưỡng hoặc xung đột → `needs_human`.
+
+## Draft và lỗi giữa chừng
+
+Draft ghi JSON vào `data/drafts/`, ID ổn định theo `(workflow, source_id)`; retry cập nhật cùng bản. Nếu bước sau lỗi, không báo hoàn thành chung chung: trả `partial`, `failed_budget` hoặc kết quả phù hợp và giữ chi tiết lỗi. Workflow không tự tạo pending ngầm.
+
+## Tạo pending và đọc quản trị
+
+`request_approval(trip_id, action_type, action_summary)` chỉ dành cho Employee sở hữu chuyến. Cặp ID/action lặp lại trả yêu cầu cũ; yêu cầu đã resolved không được tạo lại. Chat phân biệt thao tác tạo pending với quyết định approve/reject.
+
+Admin chỉ dùng `admin_list_trips`, `admin_get_audit_history` ở lớp tool; tải CSV và reset demo là chức năng application. Reviewer dùng `list_my_trips` để xem toàn bộ dữ liệu được cấp; Employee dùng cùng tool nhưng chỉ thấy chuyến của mình.
+
+## RAG và Approver
+
+Lọc `allowed_roles` trước BM25, kiểm tra phiên bản và tạo citation. Approver chỉ đọc đúng pending scope và danh mục theo action. Nếu không có evidence hoặc có xung đột, chuyển `needs_human`, không báo completed. Kiểm tra claim hiện dựa trên từ khóa, cùng câu và cùng cực tính, chưa phải suy luận ngữ nghĩa.
+
+## Bốn tuyến hội thoại
+
+- `SELF_SERVE`: tác vụ hợp lệ, lời chào, danh sách theo quyền, preferences, policy và pending request tường minh.
+- `CLARIFY`: thiếu ID, ngày không khớp, nhiều hồ sơ phù hợp hoặc thiếu trường/chứng từ.
+- `HANDOFF_STAFF`: cần người xem xét; mẫu cố định `[HANDOFF TO STAFF | Ticket: HND-...]`, chỉ có facts và citation đã xác minh; ghi hàng đợi demo.
+- `REJECT_SAFETY`: injection, ID sai, ngoài scope hoặc thao tác bị cấm theo role. Phản hồi scope dùng chung; lỗi role mô tả đúng thao tác. Không kèm câu nhắc thừa về việc agent chưa thực hiện.

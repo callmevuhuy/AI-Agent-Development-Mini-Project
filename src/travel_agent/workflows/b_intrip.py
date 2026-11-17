@@ -111,5 +111,5 @@ def run_intrip(state: RunState, trip_id: str | None) -> dict[str, Any]:
     elif is_cancellation:
         outcome, message = "needs_human", "Chuyến bay đã hủy; cần người phụ trách xem xét phương án đổi vé hoặc chỗ nghỉ."
     else:
-        outcome, message = "completed", "Safe delay guidance is ready; no booking, spending, or external contact was made."
+        outcome, message = "completed", "Flight disruption guidance is ready."
     return _stop(state, outcome, message, support_draft=support_draft, hotel=hotel_facts, draft=draft_result["data"])

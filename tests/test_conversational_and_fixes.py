@@ -227,7 +227,8 @@ def test_long_term_preference_formats_response_and_strict_handoff_logs_utf8_csv(
     handoff = chat_turn("Can you book a hotel in Tokyo and charge card 4111222233334444?", "U-EMP-001", session_id="hnd-s1")
     assert handoff["route"] == "HANDOFF_STAFF" and handoff["handoff_required"] is True
     assert handoff["bot_response"].startswith("[HANDOFF TO STAFF | Ticket: HND-")
-    assert "No automated booking, payment, or approval decision was made." in handoff["bot_response"]
+    assert "No automated booking, payment, or approval decision was made." not in handoff["bot_response"]
+    assert "Next Step:" in handoff["bot_response"]
 
     from travel_agent.logging_utils import _resolve_log_dir
     import travel_agent.mock_systems._storage as storage
@@ -304,14 +305,14 @@ def test_web_demo_http_endpoints_and_admin_only_export_reset():
 
 
 @pytest.mark.parametrize("user_id,message,scope,expected_detail", [
-    ("U-EMP-002", "Prepare trip TRIP-2026-001", None, "Employee chỉ được xem và xử lý chuyến đi của chính mình"),
-    ("U-EMP-001", "My flight TRIP-2026-002 is delayed", None, "Employee chỉ được xem và xử lý chuyến đi của chính mình"),
-    ("U-EMP-002", "Review expense EXP-2026-003", None, "báo cáo chi phí của chính mình"),
-    ("U-REV-001", "Show audit log", None, "Chỉ Admin"),
-    ("U-ADM-001", "Prepare trip TRIP-2026-006", None, "Admin chỉ được xem"),
-    ("U-ADM-001", "What is the hotel policy?", None, "Admin chỉ được xem"),
-    ("U-APR-001", "Check trip TRIP-2026-006", {"trip_id": "TRIP-2026-001", "action_type": "checklist_review"}, "Approver chỉ được đọc"),
-    ("U-APR-001", "What is the meal allowance cap?", {"trip_id": "TRIP-2026-001", "action_type": "checklist_review"}, "danh mục chính sách"),
+    ("U-EMP-002", "Prepare trip TRIP-2026-001", None, "ngoài phạm vi truy cập"),
+    ("U-EMP-001", "My flight TRIP-2026-002 is delayed", None, "ngoài phạm vi truy cập"),
+    ("U-EMP-002", "Review expense EXP-2026-003", None, "ngoài phạm vi truy cập"),
+    ("U-REV-001", "Show audit log", None, "Reviewer không được xem audit log"),
+    ("U-ADM-001", "Prepare trip TRIP-2026-006", None, "Admin không được chuẩn bị checklist"),
+    ("U-ADM-001", "What is the hotel policy?", None, "Admin không được tra cứu chính sách"),
+    ("U-APR-001", "Check trip TRIP-2026-006", {"trip_id": "TRIP-2026-001", "action_type": "checklist_review"}, "ngoài phạm vi truy cập"),
+    ("U-APR-001", "What is the meal allowance cap?", {"trip_id": "TRIP-2026-001", "action_type": "checklist_review"}, "ngoài phạm vi truy cập"),
     ("U-APR-001", "Review expense EXP-2026-001", {"trip_id": "TRIP-2026-001", "action_type": "checklist_review"}, "không được rà soát báo cáo chi phí"),
 ])
 def test_permission_errors_explain_reason_in_vietnamese_even_for_english_input(user_id, message, scope, expected_detail):
@@ -402,3 +403,107 @@ def test_http_tab_permission_and_malformed_request_errors_are_readable_vietnames
         assert status == 400
         assert body["code"] == "invalid_argument" and "Hãy" in body["error"]
         assert "Traceback" not in body["error"]
+
+
+@pytest.mark.parametrize("uid,message,scope,outcome", [
+    ("U-EMP-001", "Kiểm tra chuyến TRIP-2026-001", None, "awaiting_approval"),
+    ("U-EMP-002", "Chuẩn bị checklist TRIP-2026-006", None, "completed"),
+    ("U-EMP-002", "Chuyến bay TRIP-2026-002 bị trễ", None, "completed"),
+    ("U-EMP-002", "Kiểm tra chi phí EXP-2026-001", None, "completed"),
+    ("U-EMP-003", "Chuẩn bị checklist TRIP-2026-003", None, "needs_input"),
+    ("U-EMP-004", "Kiểm tra chuyến TRIP-2026-005", None, "needs_human"),
+    ("U-REV-001", "Chuẩn bị checklist TRIP-2026-006", None, "completed"),
+    ("U-APR-001", "Kiểm tra chuyến TRIP-2026-001", {"trip_id": "TRIP-2026-001", "action_type": "checklist_review"}, "completed"),
+    ("U-APR-001", "Chuyến bay TRIP-2026-002 bị trễ", {"trip_id": "TRIP-2026-002", "action_type": "escalation"}, "completed"),
+    ("U-ADM-001", "Xem nhật ký kiểm toán", None, "completed"),
+])
+def test_chat_role_matrix_positive_and_business_stops(uid, message, scope, outcome):
+    result = chat_turn(message, uid, session_id="role-matrix", approval_scope=scope)
+    assert result["outcome"] == outcome
+    assert result["error"] is None
+    assert result["bot_response"].strip()
+    for boilerplate in ("Agent chưa thực hiện", "No automated booking", "no booking, spending", "Boundary Notice", "không tự ý đặt vé"):
+        assert boilerplate not in result["bot_response"]
+
+
+@pytest.mark.parametrize("uid,owned", [("U-EMP-001", {"TRIP-2026-001", "TRIP-2026-004"}), ("U-EMP-002", {"TRIP-2026-002", "TRIP-2026-006"}), ("U-EMP-003", {"TRIP-2026-003"}), ("U-EMP-004", {"TRIP-2026-005"})])
+def test_employee_chat_trip_list_is_owner_scoped(uid, owned):
+    result = chat_turn("Xem danh sách toàn bộ chuyến đi", uid, session_id="own-list")
+    assert result["route"] == "SELF_SERVE" and result["error"] is None
+    for number in range(1, 7):
+        trip = f"TRIP-2026-{number:03}"
+        assert (trip in result["bot_response"]) == (trip in owned)
+
+
+@pytest.mark.parametrize("uid,message,scope,detail", [
+    ("U-ADM-001", "Chuẩn bị checklist TRIP-2026-006", None, "Admin không được chuẩn bị checklist"),
+    ("U-ADM-001", "Chuyến bay TRIP-2026-002 bị trễ", None, "Admin không được tạo bản nháp hỗ trợ"),
+    ("U-ADM-001", "Kiểm tra chi phí EXP-2026-001", None, "Admin không được rà soát báo cáo chi phí"),
+    ("U-REV-001", "Xem nhật ký kiểm toán", None, "Reviewer không được xem audit log"),
+    ("U-REV-001", "Yêu cầu phê duyệt checklist TRIP-2026-006", None, "Reviewer không được tạo yêu cầu phê duyệt"),
+    ("U-APR-001", "Tạo checklist TRIP-2026-001", {"trip_id": "TRIP-2026-001", "action_type": "checklist_review"}, "Approver không được chuẩn bị checklist"),
+    ("U-APR-001", "Yêu cầu phê duyệt checklist TRIP-2026-001", None, "Approver không được tạo yêu cầu phê duyệt"),
+    ("U-APR-001", "Phê duyệt chuyến đi TRIP-2026-001", None, "Approver không được quyết định phê duyệt qua chat"),
+])
+def test_chat_role_action_errors_are_specific_and_do_not_write_business_data(uid, message, scope, detail):
+    from travel_agent.mock_systems import _storage, draft_workspace
+    before = _storage.load_dataset("approval_requests.json")
+    result = chat_turn(message, uid, session_id="role-errors", approval_scope=scope)
+    assert result["route"] == "REJECT_SAFETY"
+    assert detail in result["bot_response"]
+    assert result["error"]["code"] == "unauthorized_scope"
+    assert not result["handoff_required"] and not result["citations"]
+    assert not list(draft_workspace.DRAFT_DIR.glob("*.json"))
+    assert _storage.load_dataset("approval_requests.json") == before
+
+
+def test_out_of_scope_messages_are_shared_without_revealing_record_owner():
+    requests = [("U-EMP-002", "Kiểm tra chuyến TRIP-2026-001", None), ("U-EMP-001", "Kiểm tra chi phí EXP-2026-001", None), ("U-APR-001", "Kiểm tra chuyến TRIP-2026-006", {"trip_id": "TRIP-2026-001", "action_type": "checklist_review"})]
+    messages = []
+    for uid, message, scope in requests:
+        result = chat_turn(message, uid, session_id="shared-error", approval_scope=scope)
+        messages.append(result["bot_response"])
+        assert not result["citations"] and not result["result"].get("trip")
+        assert "Alex Nguyen" not in messages[-1] and "Jamie Tran" not in messages[-1]
+    assert len(set(messages)) == 1
+
+
+def test_chat_approval_request_is_explicit_pending_and_idempotent():
+    from travel_agent.mock_systems import _storage
+    first = chat_turn("Yêu cầu phê duyệt checklist TRIP-2026-006", "U-EMP-002", session_id="approval-chat")
+    second = chat_turn("Request approval for TRIP-2026-006", "U-EMP-002", session_id="approval-chat")
+    assert first["outcome"] == second["outcome"] == "awaiting_approval"
+    assert first["result"]["approval_request"] == second["result"]["approval_request"]
+    assert first["result"]["approval_request"]["status"] == "pending"
+    assert len([r for r in _storage.load_dataset("approval_requests.json") if r["trip_id"] == "TRIP-2026-006"]) == 1
+    denied = chat_turn("Yêu cầu phê duyệt checklist TRIP-2026-001", "U-EMP-002", session_id="approval-chat")
+    assert denied["error"]["message"].startswith("Dữ liệu được yêu cầu nằm ngoài")
+
+
+def test_approver_preferences_and_invalid_id_do_not_fall_through_to_scoped_facts():
+    saved = chat_turn("Remember I prefer detailed answers", "U-APR-001", session_id="apr-pref")
+    assert saved["outcome"] == "completed" and "Saved preference" in saved["bot_response"]
+    scope = {"trip_id": "TRIP-2026-001", "action_type": "checklist_review"}
+    for uid in ("U-APR-001", "U-ADM-001"):
+        result = chat_turn("Kiểm tra chuyến TRIP-26-1", uid, session_id="invalid-role", approval_scope=scope)
+        assert result["error"]["code"] == "invalid_argument"
+        assert "Singapore" not in result["bot_response"]
+
+
+def test_approver_cannot_substitute_trip_facts_for_unauthorized_itinerary_request():
+    scope = {"trip_id": "TRIP-2026-001", "action_type": "checklist_review"}
+    result = chat_turn("Check flight delay for TRIP-2026-001", "U-APR-001", session_id="wrong-read", approval_scope=scope)
+    assert result["route"] == "REJECT_SAFETY"
+    assert "Approver không được đọc hành trình" in result["bot_response"]
+    assert "Singapore" not in result["bot_response"]
+
+
+def test_approval_policy_question_is_not_a_pending_request_and_reviewer_is_denied_without_id():
+    from travel_agent.mock_systems import _storage
+    before = _storage.load_dataset("approval_requests.json")
+    decision = route_message_intent("Chính sách yêu cầu phê duyệt là gì?")
+    assert decision.intent == "policy_qa"
+    result = chat_turn("Yêu cầu phê duyệt checklist", "U-REV-001", session_id="no-request-id")
+    assert result["route"] == "REJECT_SAFETY"
+    assert "Reviewer không được tạo yêu cầu phê duyệt" in result["bot_response"]
+    assert _storage.load_dataset("approval_requests.json") == before

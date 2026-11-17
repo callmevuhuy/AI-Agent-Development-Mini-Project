@@ -1,84 +1,76 @@
-# ARCHITECTURE
+# Kiến trúc hệ thống
 
-## 1. Kiến trúc tổng thể
-Model chỉ đề xuất tool call. Dispatcher (code) kiểm tra và thực thi. Agent chỉ thấy mock systems qua tool.
+## 1. Luồng tổng thể
+
+Model hoặc planner chỉ đề xuất lời gọi. Application gắn danh tính; dispatcher xác thực; tool là ranh giới đọc/ghi dữ liệu nghiệp vụ giả lập. Memory hỗ trợ nối hội thoại và không thay thế nguồn nghiệp vụ.
 
 ```mermaid
 flowchart TD
-    U["User (Employee / Reviewer / Approver / Admin)<br/>message + IDs"] --> APP["Application layer<br/>gắn user_context; Approver có approval_scope pending"]
-    APP --> ORCH["Orchestrator<br/>state machine + budget + workflow phase"]
-    ORCH <--> LLM["Planner<br/>RuleBased (mặc định) | LLM tùy chọn<br/>chỉ đề xuất tool_name + args"]
-    ORCH --> DISP["Dispatcher<br/>registry → allowlist → JSON Schema →<br/>domain validation → role/scope → budget"]
-    DISP -->|reject| REJ["failed_validation / unauthorized_scope<br/>(trace, không execute)"]
-    DISP --> TOOLS["Tool wrappers (hẹp, structured result)"]
-    TOOLS --> M1["Mock Travel Request"]
-    TOOLS --> M2["Mock Traveler Profile"]
-    TOOLS --> M3["Mock Itinerary"]
-    TOOLS --> M4["Mock Approval (fixture)"]
-    TOOLS --> M5["Mock Expense"]
-    TOOLS --> RAG["Policy KB + RAG<br/>role ACL → retriever → grounding → citation"]
-    TOOLS --> DW["Draft Workspace (sandbox)<br/>idempotent draft_id"]
-    ORCH --> MEM["Memory<br/>session state | preference (user yêu cầu)"]
-    ORCH --> TR["Safe trace + eval record"]
-    APP --> ADMIN["Admin read-only tools<br/>trip overview + audit history"]
-    ORCH --> OUT{"Evidence đủ<br/>và trong scope?"}
-    OUT -->|đủ| DONE["completed + draft<br/>not_sent / not_published"]
-    OUT -->|thiếu input| NI["needs_input"]
-    OUT -->|thiếu evidence / rủi ro| NH["needs_human"]
-    OUT -->|approval pending thật| AA["awaiting_approval"]
+    U[Người dùng và tài khoản demo] --> APP[Application: danh tính, phiên và scope]
+    APP --> CONV[Nhận diện ý định và điều phối hội thoại]
+    CONV --> PLAN[Planner đề xuất tool và arguments]
+    PLAN --> DISP[Dispatcher: registry, allowlist, schema, quyền, budget]
+    DISP -->|Từ chối| ERR[Lỗi chung theo scope hoặc lỗi thao tác theo role]
+    DISP -->|Hợp lệ| TOOL[Wrapper công cụ]
+    TOOL --> MOCK[Hệ thống nghiệp vụ giả lập]
+    TOOL --> RAG[Kho policy: ACL, BM25, căn cứ và citation]
+    TOOL --> DRAFT[Bản nháp JSON có ID ổn định]
+    CONV <--> MEM[Memory theo user và session]
+    CONV --> TRACE[Trace an toàn và kết quả cuối]
+    CONV --> OUT[Phản hồi hoặc yêu cầu người xử lý]
 ```
 
-## 2. Workflow A — Pre-trip (dọc)
+`nlu.py` nhận diện mẫu Anh–Việt, ID/ngày/điểm đến và bốn tuyến. `conversation.py` chọn nhánh theo role, nối ngữ cảnh, chạy workflow và định dạng. `orchestrator.py` đếm lần thử, retry và ghi trace; `dispatcher.py` kiểm tra lời gọi trước khi thực thi. `errors.py` tập trung cách diễn đạt lỗi.
+
+## 2. Quy trình A: trước chuyến đi
+
 ```mermaid
 flowchart TD
-    A0["validate trip_id"] -->|sai format| F["failed_validation"]
-    A0 -->|thiếu| NI["needs_input"]
-    A0 --> A1["get_trip_request"]
-    A1 -->|not_found| F
-    A1 --> A2["get_approval_status"]
-    A2 --> A3["search_travel_policy<br/>(<=1 rewrite, top_k<=5)"]
-    A3 --> A4["validate_trip_requirements<br/>(requirements.json)"]
-    A4 --> A5["create_travel_checklist_draft<br/>(idempotent)"]
-    A5 --> A6{"Outcome"}
-    A6 -->|field thiếu| NI
-    A6 -->|approval pending| AA["awaiting_approval"]
-    A6 -->|rejected / cancelled / thiếu evidence| NH["needs_human"]
-    A6 -->|approved + evidence đủ| C["completed"]
+    A[Kiểm tra ID] --> B[Lấy chuyến đi]
+    B --> C[Kiểm tra trường bắt buộc]
+    C --> D[Lấy trạng thái duyệt]
+    D --> E{Có điều kiện chặn?}
+    E -->|Hủy hoặc từ chối| H[Cần người xem xét]
+    E -->|Không| F[Tra policy và kiểm tra điều kiện]
+    F --> G[Tạo checklist draft]
+    G --> I[Hoàn tất, chờ duyệt hoặc cần bổ sung]
 ```
 
-## 3. Workflow B — In-trip disruption (dọc)
+ID sai, không có hồ sơ, ngoài quyền và lỗi tool dừng ở nhánh tương ứng. Trạng thái pending chỉ được phản ánh khi nguồn thực sự trả pending. Thiếu căn cứ/xung đột cần người xử lý.
+
+## 3. Quy trình B: trong chuyến đi
+
 ```mermaid
 flowchart TD
-    B0["validate trip_id"] --> B1["get_itinerary"]
-    B1 --> B2["xác định disruption<br/>từ observation"]
-    B2 -->|không có disruption| C0["completed: không phát hiện gián đoạn"]
-    B2 --> B3["search_travel_policy<br/>disruption / emergency"]
-    B3 --> B4["create_escalation_or_support_draft<br/>(tách Itinerary fact | Policy guidance)"]
-    B4 --> B5{"Guidance đủ<br/>và không cần chi tiền / đổi vé?"}
-    B5 -->|có| C["completed"]
-    B5 -->|không| NH["needs_human<br/>(tùy chọn request_approval → pending)"]
+    A[Kiểm tra ID và quyền] --> B[Lấy hành trình]
+    B --> C{Có sự cố?}
+    C -->|Không| D[Trả dữ kiện nguồn]
+    C -->|Có| E[Tra policy hỗ trợ]
+    E --> F[Tạo draft tách facts và hướng dẫn]
+    F --> G[Hoàn tất hoặc cần người xem xét]
 ```
 
-## 4. Workflow C — Post-trip expense (dọc)
+## 4. Quy trình C: sau chuyến đi
+
 ```mermaid
 flowchart TD
-    C0["validate report_id"] --> C1["get_expense_report"]
-    C1 --> C2["deterministic validation<br/>+ calculate_expense_summary"]
-    C2 --> C3["search_travel_policy<br/>theo category liên quan"]
-    C3 --> C4["create_expense_review_draft<br/>(facts + evidence + items cần kiểm tra)"]
-    C4 --> C5{"Outcome"}
-    C5 -->|thiếu receipt / field| NI["needs_input"]
-    C5 -->|vượt ngưỡng / policy conflict| NH["needs_human"]
-    C5 -->|sạch| C["completed"]
+    A[Kiểm tra ID và quyền] --> B[Lấy báo cáo]
+    B --> C[Tool tính tổng, kiểm tra ngưỡng và chứng từ]
+    C --> D[Tra policy theo danh mục thực tế]
+    D --> E[Tạo draft rà soát]
+    E --> F[Hoàn tất, cần bổ sung hoặc cần người xem xét]
 ```
 
-## 5. Data boundary
-- Agent code không import trực tiếp `mock_systems/`; chỉ `tools/` được gọi vào đó.
-- `user_context` và `approval_scope` (nếu là lượt review Approver) đến từ application, không từ model. Approver chỉ đọc packet và facts liên quan tới đúng request pending trong scope. Source of truth của trip/itinerary/approval/expense luôn là mock systems.
-- Retrieved text là untrusted; không thay đổi allowlist, role hay outcome.
+## 5. Ranh giới dữ liệu và quyền
 
-## 6. Authorization & Conversational Extensions
-- `request_approval` is an Employee-only, owner-scoped tool that creates one pending request per `(trip_id, action_type)`. Only the external mock approval helper changes a decision; it appends an audit event with actor, reason, timestamp and run ID.
-- Admin has read-only `admin_list_trips` and `admin_get_audit_history`. No approval, draft, memory, policy RAG, or business-write tool is allowed.
-- Policy chunks carry `classification` and `allowed_roles`. The policy KB filters by role before BM25 ranking, version conflict calculation, and citation generation. Approver access additionally requires a pending action scope and category permission.
-- Conversational entrypoints route English user requests through `src/travel_agent/nlu.py` and `src/travel_agent/conversation.py` into 4 strict routes (`SELF_SERVE`, `CLARIFY`, `HANDOFF_STAFF`, `REJECT_SAFETY`). Escalations use a deterministic Staff Handoff template (never improvised explanations) and log to UTF-8 BOM CSV (`data/logs/chat_history.csv`, `data/logs/handoff_queue.csv`).
+Agent không đọc file nghiệp vụ tùy ý. Application có quyền đọc danh tính, trạng thái giao diện và ghi log; tool wrapper gọi mock systems. Context gồm `user_id`, `role`, `session_id`, có thể thêm `approval_scope` đang pending. Model không được tự khai danh tính trong arguments.
+
+Employee chỉ thấy hồ sơ của mình; Reviewer rà soát dữ liệu được cấp; Approver chỉ đọc đúng loại facts và policy phục vụ scope; Admin chỉ có tool đọc tổng quan/audit. Các API web áp dụng quyền riêng ở server, không chỉ ẩn nút trên giao diện.
+
+## 6. RAG, approval và audit
+
+`request_approval` dành cho Employee sở hữu chuyến, tạo pending không trùng theo cặp ID/action. Quyết định do helper bên ngoài tool set ghi cùng audit có người thực hiện, lý do, thời điểm và run ID.
+
+Kho policy lọc `allowed_roles` trước chấm BM25, phân tích phiên bản và citation. Approver còn bị giới hạn danh mục theo action. Thiếu evidence hoặc xung đột không được biến thành câu trả lời completed.
+
+Hội thoại có bốn tuyến: `SELF_SERVE`, `CLARIFY`, `HANDOFF_STAFF`, `REJECT_SAFETY`. Handoff ghi phiếu mô phỏng trong CSV, không đồng nghĩa đã gửi cho người thật. Trace và CSV hội thoại tách biệt khỏi audit nghiệp vụ.

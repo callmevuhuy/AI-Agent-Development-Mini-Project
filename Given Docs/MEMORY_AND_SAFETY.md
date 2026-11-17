@@ -1,62 +1,70 @@
-# MEMORY_AND_SAFETY
+# Memory, phân quyền và an toàn
 
-## 1. Ba loại state, tách biệt
-| Loại | Scope | Ví dụ | Lưu ở đâu |
+## 1. Ba loại trạng thái
+
+| Loại | Phạm vi | Nội dung | Nơi lưu |
 |---|---|---|---|
-| Run state | `run_id` | step_count, trace, outcome | RAM + `eval/traces/` |
-| Session state | `user_id` + `session_id` | `active_trip_id`, `active_report_id`, `last_workflow`, `pending_slot` (with TTL) | `session_store` (xóa khi hết TTL/session) |
-| Persistent preference | `user_id` | `response_language`, `preferred_output_format` | `preference_store`, CHỈ khi user yêu cầu lưu |
+| Trạng thái lượt | `run_id` | Số bước, trace, kết quả cuối | RAM; evaluator xuất trace mẫu |
+| Ngữ cảnh phiên | `user_id` + `session_id` | `active_trip_id`, `active_report_id`, `last_workflow`, `pending_slot` | JSON trong `data/memory/sessions/` |
+| Tùy chọn dài hạn | `user_id` | `response_language`, `preferred_output_format` | JSON trong `data/memory/preferences/` |
 
-Source of truth: mock systems. Trip status, itinerary, approval, expense luôn đọc lại qua tool; memory không được thay thế.
+Session có TTL mặc định 1.800 giây, được gia hạn khi ghi. Khi đọc thấy hết hạn, file bị xóa và trả trạng thái rỗng; chưa có tiến trình nền dọn file. Preferences không tự hết hạn. Đóng trình duyệt không xóa memory trên đĩa.
 
-## 2. Không lưu
-Hộ chiếu, visa, thẻ, số tài khoản, token, địa chỉ thật, full raw conversation (mặc định).
+Chỉ chấp nhận ngôn ngữ `en|vi` và định dạng `concise|detailed`. Ghi/xóa preference cần `memory_write_authorized=true` do application đặt khi người dùng yêu cầu rõ ràng. Model không truyền cờ hoặc user/session qua arguments.
 
-## 2. Role và quyền (mock authorization)
-Application gắn `user_context = {user_id, role, session_id}` từ `users.json`; model không được tự khai role. Với một lượt review của Approver, application có thể gắn thêm `approval_scope = {trip_id, action_type}` lấy từ đúng một request đang `pending`. Model không được tự đặt hoặc mở rộng scope này. `user_id` khác `traveler_id`: Employee map tới đúng một `traveler_id`.
+Memory chỉ giữ ID và ngữ cảnh để nối lượt, không phải nguồn sự thật về chuyến đi, hành trình, approval hoặc chi phí. Những dữ kiện đó phải đọc lại từ mock tool. Không có khả năng tìm kiếm toàn bộ lịch sử chat hoặc memory theo vector. Chưa có giới hạn theo token, mã hóa hay kiểm soát ghi đồng thời ở nhiều tiến trình.
 
-| Hành động | Employee | Reviewer | Approver | Admin |
+## 2. Dữ liệu không được lưu trong memory
+
+Không lưu hộ chiếu, visa, thẻ, số tài khoản, token, địa chỉ thật hoặc nguyên văn hội thoại. Kho chỉ nhận các khóa nằm trong danh sách cho phép. CSV hội thoại là hệ thống log riêng, có che một số mẫu token/số thẻ nhưng không bảo đảm phát hiện mọi PII.
+
+## 3. Danh tính và quyền
+
+Application tra `user_id`, `role`, `traveler_id` từ `users.json`, gắn `session_id`. Scope Approver là `{trip_id, action_type}` do application cấp cho một yêu cầu pending. Tài khoản demo chưa phải đăng nhập production; bộ nhớ nội bộ tin cậy context từ application, dispatcher kiểm tra role khớp hồ sơ trước khi chạy tool.
+
+| Thao tác | Employee | Reviewer | Approver | Admin |
 |---|---|---|---|---|
-| Đọc trip / itinerary / expense | Chỉ của mình | Tất cả trong dataset | Chỉ facts cần cho `approval_scope` đang pending; không browse/list tùy ý | Chỉ trip overview |
-| Đọc approval status | Của mình | Tất cả | Chỉ request trong `approval_scope` | Chỉ lịch sử audit |
-| Đọc traveler profile | Của mình | Tất cả (field không nhạy cảm) | Không đọc profile trực tiếp | Không |
-| Tạo draft checklist / escalation | Của mình | Mọi trip | Không | Không |
-| Tạo draft expense review | Của mình | Mọi report | Không | Không |
-| `request_approval` (tạo pending) | Chỉ trip của mình | Không | Không | Không |
-| Preference / session | Của mình | Của mình | Của mình | Không |
-| Xem toàn bộ trip | Không | Có | Không | Có (read-only) |
-| Xem audit history | Không | Không | Không | Có (read-only) |
-| Policy RAG | Allowed chunks | Allowed chunks | Category theo action + pending scope | Không |
+| Đọc chuyến, hành trình, chi phí | Của mình | Tất cả dữ liệu giả lập | Chỉ facts cần cho scope; không đọc chi phí | Tổng quan chuyến |
+| Đọc trạng thái duyệt | Của mình | Tất cả | Theo scope | Qua audit |
+| Hồ sơ nhân viên | Của mình | Các trường không nhạy cảm | Không | Không |
+| Tạo draft nghiệp vụ | Của mình | Mọi hồ sơ được cấp | Không | Không |
+| Tạo yêu cầu pending | Của mình | Không | Không | Không |
+| Session và preferences | Của mình | Của mình | Của mình | Không |
+| Danh sách chuyến | Của mình | Tất cả | Không | Tất cả, chỉ đọc |
+| Audit | Không | Không | Không | Có |
+| RAG | Chunk được cấp | Chunk được cấp | Theo action và scope pending | Không |
 
-- Approver chỉ đọc các source facts tối thiểu cần để xem xét request `pending` trong `approval_scope`. Ví dụ: checklist review được giới hạn vào trip facts; escalation review vào itinerary/disruption liên quan. Hiện chưa có tool đọc packet/draft. Không có quyền đọc trip, expense, itinerary hoặc approval khác để tìm kiếm rộng. Nếu scope không hợp lệ hoặc request không còn pending, trả `unauthorized_scope` và không trả dữ liệu.
-- `U-APR-001` không có phân công approver riêng; application chỉ đưa một request đang `pending` trong `approval_requests.json` vào scope của lượt review. Dispatcher kiểm tra lại fixture trên từng lần đọc và giới hạn tool theo `action_type`. Không có công cụ list request hoặc chuyển scope do model yêu cầu.
-- Fixture mẫu có scope `checklist_review` cho TRIP-2026-001 và `escalation` cho TRIP-2026-002. `request_approval` chỉ tạo `pending`, idempotent theo `(trip_id, action_type)`; quyết định đến từ mock external helper, không nằm trong tool set.
-- Approver không được tạo draft, gọi `request_approval`, thay đổi fixture, approve/reject, publish hay gửi bất kỳ nội dung nào. Quyết định `approved/rejected` chỉ được mô phỏng bằng fixture/test helper nằm ngoài tool set của agent.
-- Admin (`U-ADM-001`) chỉ được gọi `admin_list_trips` và `admin_get_audit_history`; không thể tạo draft, request approval, approve/reject, sửa dữ liệu hoặc search policy. Audit local mock giữ vô thời hạn trong prototype, không có chức năng sửa/xóa; chỉ lưu workflow outcome, request creation và decision events, không lưu raw message.
-- RAG ACL được kiểm tra trước retrieval: Employee/Reviewer chỉ thấy chunks có `allowed_roles`; Approver cần pending `approval_scope` và category phù hợp action; Admin mặc định không có corpus access. Chunk bị lọc không thể tạo citation, version conflict hay trace result.
-- Vi phạm quyền -> `unauthorized_scope`, trace ghi `safety_event`, không lộ dữ liệu của người khác trong error message.
-- Test bắt buộc: Employee A đọc trip của B (bị chặn), Employee gọi draft của trip người khác, Approver đọc đúng packet/facts trong scope pending (cho phép), Approver đọc dữ liệu ngoài scope hoặc tạo draft/request approval (bị chặn), Reviewer đọc mọi trip (cho phép).
+Approver `U-APR-001` chưa có bảng phân công cá nhân; dispatcher kiểm tra lại scope có bản ghi pending trước mỗi tool call. `checklist_review` đọc trip/approval và tra approval/travel/visa/insurance; `escalation` đọc itinerary và tra travel; `publish_request` đọc trip/approval và tra approval. Không có tool list mọi yêu cầu hoặc approve/reject.
 
-## 3. API memory
-Internal API nhận `user_context` từ application: `get_preferences(context)`, `get_preference(context, key)`, `set_preference(context, key, value)`, `delete_preference(context, key)`, `get_session_state(context)`, `set_session_value(context, key, value)`, `delete_session_value(context, key)`, `clear_session(context)`. Tool schema không nhận `user_id` hay `session_id` từ model.
-Preference keys chỉ gồm `response_language` (`en|vi`) và `preferred_output_format` (`concise|detailed`). Ghi/xóa preference cần `memory_write_authorized=true` do application đặt khi user yêu cầu rõ ràng; model không thể tự đặt cờ này trong args. Session lưu `active_trip_id`, `active_report_id`, `last_workflow`, và `pending_slot` kèm TTL (`_expires_at`), scoped theo user + session, không phải nguồn sự thật cho trip. Mọi hàm kiểm tra context; truy cập chéo user/session bị từ chối.
+## 4. Phản hồi khi bị từ chối
 
-## 4. Safety controls
-| Lớp | Cách làm |
+- Dữ liệu hoặc danh mục ngoài scope: dùng cùng câu chung, không tiết lộ người sở hữu hoặc nội dung hồ sơ.
+- Role yêu cầu thao tác không được phép: nêu rõ role, thao tác cụ thể và người có thể hỗ trợ. Ví dụ Reviewer xem audit được hướng tới Admin; Admin rà soát chi phí được hướng tới Employee hoặc Reviewer.
+- Thiếu scope hoặc scope hết pending: giải thích cần chọn lại yêu cầu đang chờ.
+- Giữ `error.code`, `error.message`, `error.retryable`; trace ghi sự kiện từ chối. Không có side effect nghiệp vụ trên nhánh bị từ chối.
+
+## 5. API memory nội bộ
+
+`get_preferences`, `get_preference`, `set_preference`, `delete_preference`, `get_session_state`, `set_session_value`, `delete_session_value`, `clear_session` nhận context do application cung cấp. `session_id` chỉ nhận chữ, số, `_`, `-`, tối đa 80 ký tự; ID người dùng có mẫu cố định để ngăn đường dẫn thoát thư mục.
+
+## 6. Các lớp bảo vệ
+
+| Lớp | Cơ chế |
 |---|---|
-| Input validation | Regex ID, giới hạn độ dài query, required fields |
-| Tool allowlist | Per-workflow; tool ngoài list bị từ chối trước execution |
-| Validation | JSON Schema + domain + output check |
-| Least privilege | Tool read-only hoặc draft-only; không file/network/shell tự do |
-| Budgets | max_steps=8 (trần cho phép MAX_ALLOWED_STEPS=12), retry<=2, top_k<=5, rewrite<=1 |
-| Data boundary | Chỉ dataset training; isolation user/session |
-| Approval | `request_approval` chỉ tạo record `pending`; pending/rejected => không action nào; agent không có tool duyệt |
-| Prompt injection | User text + chunk là data; strip/flag chuỗi kiểu "ignore previous instructions"; không cho chunk đổi allowlist hay gọi tool |
-| Audit | Trace whitelist field; append-only mock events (`audit_events.json`) không lưu raw message/secret/PII; tách riêng CSV conversation logger (`chat_history.csv`, `handoff_queue.csv` UTF-8 BOM) có che số thẻ/secret cho vận hành bàn giao |
+| Đầu vào | Regex ID, trường bắt buộc, kiểu dữ liệu, giới hạn query |
+| Tool | Registry, allowlist theo workflow, JSON Schema không nhận trường thừa |
+| Quyền | Role, chủ hồ sơ, scope pending và ACL policy |
+| Budget | Mặc định 8 bước một state, trần 12; tối đa 2 retry; top-k tối đa 5; một rewrite mỗi nhánh |
+| Kết quả | Kiểm tra cấu trúc, không đưa raw exception vào phản hồi |
+| Injection | Nhận diện chỉ thị vượt quy tắc; loại chunk không an toàn khỏi evidence |
+| Audit | Trace dùng trường cho phép; JSON audit không chứa raw message; CSV vận hành được lọc mẫu dữ liệu nhạy cảm |
 
-## 5. Xử lý injection
-- Input user: dispatcher không cho tool ngoài allowlist dù user ép; planner chỉ chọn từ tool list của workflow.
-- Chunk policy chứa lệnh: đánh dấu `untrusted`, bỏ qua câu lệnh, vẫn có thể trích phần policy hợp lệ nếu có; ghi `safety_event` vào trace.
+Orchestrator điều phối retry và trace; dispatcher kiểm tra budget và thực thi. Chưa có timeout cưỡng chế cho handler bị treo. Audit là file JSON cục bộ, không phải kho chống sửa production; Admin có endpoint reset runtime riêng ngoài tool set.
 
-## 6. Giới hạn (đưa vào báo cáo)
-Không booking/đổi/hủy vé, visa, bảo hiểm, thanh toán, hoàn tiền, phê duyệt thật, gửi email/ticket, API/credential thật, scheduler/background job/production.
+## 7. Kiểm thử bắt buộc
+
+Kiểm tra cách ly user/session, hết TTL, không lưu khóa lạ, ghi preference thiếu đồng ý, giả mạo identity trong arguments, Employee đọc/tạo draft cho hồ sơ người khác, Reviewer đọc hợp lệ, Approver trong/ngoài scope và scope hết pending, Admin bị chặn nghiệp vụ. Kết quả cần kiểm tra cả thông báo, dữ liệu không bị lộ và không có side effect bị cấm.
+
+## 8. Ngoài phạm vi
+
+Không có đặt/đổi/hủy vé thật, visa, bảo hiểm, thanh toán, hoàn tiền, quyết định phê duyệt thật, gửi email/ticket ra ngoài, API hoặc credential thật, lập lịch nền và triển khai production.

@@ -5,6 +5,7 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from travel_agent.config import DEFAULT_MAX_STEPS, MAX_ALLOWED_STEPS
+from travel_agent.errors import scope_error, tool_role_error
 from travel_agent.mock_systems.approval import get_approval_request
 from travel_agent.mock_systems.expense import get_expense_report
 from travel_agent.mock_systems.trip import get_trip_request
@@ -38,119 +39,63 @@ def _scope_error(message: str = "Ngữ cảnh người dùng không hợp lệ. 
 
 
 # Dispatcher Authorization (Mục 12): Kiểm tra ủy quyền truy xuất dữ liệu theo đúng vai trò và phạm vi người dùng
-def _authorize(
-    tool_name: str, arguments: dict[str, Any], user_context: dict[str, Any]
-) -> dict[str, Any] | None:
+def _authorize(tool_name: str, arguments: dict[str, Any], user_context: dict[str, Any]) -> dict[str, Any] | None:
     user_id = user_context.get("user_id")
     user = get_user(user_id) if isinstance(user_id, str) else None
-    
-    # Tài khoản user_id phải tồn tại trong mock database
-    if not user:
+    if (not user or user_context.get("role") != user["role"]
+            or not isinstance(user_context.get("session_id"), str) or not user_context["session_id"]):
         return _scope_error()
-    # Vai trò trong ngữ cảnh phải trùng khớp với hồ sơ lưu trong hệ thống
-    if user_context.get("role") != user["role"]:
-        return _scope_error()
-    # Bắt buộc phải có session_id dạng chuỗi không rỗng
-    if not isinstance(user_context.get("session_id"), str) or not user_context["session_id"]:
-        return _scope_error()
-
     role = user["role"]
-    
-    # Admin chỉ được phép gọi các công cụ quản trị hệ thống (_ADMIN_TOOLS)
     if role == "Admin":
-        return None if tool_name in _ADMIN_TOOLS else _scope_error(
-            "Admin chỉ được xem tổng quan chuyến đi và audit log; không được chạy workflow nghiệp vụ, tạo draft, truy cập bộ nhớ hay tra cứu chính sách. Hãy chọn Employee hoặc Reviewer cho tác vụ nghiệp vụ."
-        )
-        
-    # Cấm các vai trò không phải Admin gọi công cụ quản trị
+        return None if tool_name in _ADMIN_TOOLS else tool_role_error(role, tool_name)
     if tool_name in _ADMIN_TOOLS:
-        return _scope_error("Chỉ Admin được xem tổng quan quản trị và audit log. Hãy chọn tài khoản Admin để sử dụng chức năng này.")
-        
-    # Chỉ duy nhất nhân viên (Employee) mới được phép gửi yêu cầu phê duyệt chuyến đi
-    if tool_name == "request_approval" and role != "Employee":
-        return _scope_error("Chỉ Employee được tạo yêu cầu phê duyệt cho chuyến đi của chính mình. Reviewer và Approver không được gửi yêu cầu thay nhân viên.")
-        
-    # Nhân viên chỉ được nộp phê duyệt cho chuyến đi thuộc sở hữu của chính mình
+        return tool_role_error(role, tool_name)
     if tool_name == "request_approval":
+        if role != "Employee":
+            return tool_role_error(role, tool_name)
         trip = get_trip_request(arguments.get("trip_id", ""))
         if not trip or trip.get("traveler_id") != user.get("traveler_id"):
-            return _scope_error("Không thể gửi yêu cầu phê duyệt: Employee chỉ được gửi cho chuyến đi của chính mình. Hãy kiểm tra mã chuyến đi trong danh sách của bạn.")
-            
-    # Thao tác ghi/xóa tùy chọn bộ nhớ bắt buộc phải có sự đồng thuận từ ứng dụng
+            return scope_error()
     if tool_name in _MEMORY_TOOLS:
         if tool_name in {"set_preference", "delete_preference"} and user_context.get("memory_write_authorized") is not True:
             return failure("not_allowed", "Chỉ được lưu hoặc xóa tùy chọn khi bạn yêu cầu rõ ràng. Hãy nêu tùy chọn cần thay đổi.")
         return None
-        
-    # Tra cứu chính sách chỉ cho phép các vai trò trong _RAG_ROLES
-    if tool_name == "search_travel_policy":
-        if role not in _RAG_ROLES:
-            return _scope_error()
-        # Approver chỉ được tra cứu danh mục chính sách được cấp phép trong approval_scope
-        if role == "Approver":
-            scope = user_context.get("approval_scope")
-            category = arguments.get("category")
-            if (
-                not isinstance(scope, dict)
-                or set(scope) != {"trip_id", "action_type"}
-                or scope.get("action_type") not in _APPROVER_RAG_CATEGORIES
-                or category not in _APPROVER_RAG_CATEGORIES[scope["action_type"]]
-            ):
-                return _scope_error("Approver chỉ được tra cứu danh mục chính sách thuộc phạm vi phê duyệt (approval scope) do ứng dụng cấp. Hãy chọn phạm vi phù hợp hoặc nhờ Reviewer tra cứu.")
-            # Yêu cầu phê duyệt tương ứng phải đang ở trạng thái chờ xử lý (pending)
-            request = get_approval_request(scope["trip_id"], scope["action_type"])
-            if not request or request.get("status") != "pending":
-                return _scope_error("Phạm vi phê duyệt không còn hiệu lực hoặc không có yêu cầu đang chờ (pending). Hãy chọn một yêu cầu pending được ứng dụng cấp.")
-        return None
-        
-    # Reviewer có toàn quyền đọc và kiểm toán dữ liệu công tác toàn công ty
-    if role == "Reviewer":
-        return None
-        
-    # Approver chỉ được gọi các công cụ đọc chuyến đi nằm trong phạm vi phê duyệt đang chờ
     if role == "Approver":
+        if tool_name != "search_travel_policy" and tool_name not in _TRIP_TOOLS:
+            return tool_role_error(role, tool_name)
         scope = user_context.get("approval_scope")
-        if (
-            tool_name not in _TRIP_TOOLS
-            or not isinstance(scope, dict)
-            or set(scope) != {"trip_id", "action_type"}
-            or not isinstance(scope.get("action_type"), str)
-            or scope.get("action_type") not in _APPROVER_READS
-            or arguments.get("trip_id") != scope.get("trip_id")
-            or tool_name not in _APPROVER_READS[scope["action_type"]]
-        ):
-            return _scope_error("Approver chỉ được đọc dữ liệu chuyến đi và loại thông tin thuộc đúng yêu cầu phê duyệt đang chờ (approval scope); không được xem chuyến khác, báo cáo chi phí hay tạo draft. Hãy chọn đúng phạm vi được cấp.")
-        # Yêu cầu phê duyệt phải đang ở trạng thái pending
+        if (not isinstance(scope, dict) or set(scope) != {"trip_id", "action_type"}
+                or not isinstance(scope.get("action_type"), str) or scope["action_type"] not in _APPROVER_READS):
+            return scope_error("Chưa có phạm vi phê duyệt hợp lệ. Hãy chọn yêu cầu đang chờ trong mục Phạm vi phê duyệt.")
         request = get_approval_request(scope["trip_id"], scope["action_type"])
         if not request or request.get("status") != "pending":
-            return _scope_error("Phạm vi phê duyệt không còn hiệu lực hoặc không có yêu cầu đang chờ (pending). Hãy chọn một yêu cầu pending được ứng dụng cấp.")
+            return scope_error("Phạm vi phê duyệt không còn hiệu lực hoặc không có yêu cầu đang chờ. Hãy chọn lại yêu cầu pending được cấp.")
+        if tool_name == "search_travel_policy":
+            if arguments.get("category") not in _APPROVER_RAG_CATEGORIES[scope["action_type"]]:
+                return scope_error()
+        elif arguments.get("trip_id") != scope["trip_id"]:
+            return scope_error()
+        elif tool_name not in _APPROVER_READS[scope["action_type"]]:
+            return tool_role_error(role, tool_name)
         return None
-        
-    # Từ chối nếu vai trò không phải là Employee
+    if tool_name == "search_travel_policy":
+        return None if role in _RAG_ROLES else scope_error()
+    if role == "Reviewer":
+        return None
     if role != "Employee":
-        return _scope_error()
-
-    # Kiểm tra ranh giới cách ly dữ liệu cá nhân theo traveler_id của Employee
+        return scope_error()
     traveler_id = user.get("traveler_id")
-    
-    # Từ chối nếu chuyến đi không thuộc sở hữu của nhân viên đang đăng nhập
-    if tool_name in _TRIP_TOOLS or tool_name in _TRIP_DRAFT_TOOLS or tool_name in {"validate_trip_requirements", "request_approval"}:
+    if tool_name in _TRIP_TOOLS | _TRIP_DRAFT_TOOLS | {"validate_trip_requirements", "request_approval"}:
         trip_id = arguments.get("trip_id") or arguments.get("trip_facts", {}).get("trip_id")
         trip = get_trip_request(trip_id) if trip_id else None
         if trip is not None and trip["traveler_id"] != traveler_id:
-            return _scope_error("Employee chỉ được xem và xử lý chuyến đi của chính mình. Mã chuyến đi được yêu cầu không thuộc phạm vi của bạn. Hãy chọn chuyến trong danh sách của bạn hoặc nhờ Reviewer hỗ trợ.")
-            
-    # Từ chối nếu báo cáo chi phí thuộc về nhân viên khác
-    elif tool_name in _EXPENSE_TOOLS or tool_name in _EXPENSE_DRAFT_TOOLS:
+            return scope_error()
+    elif tool_name in _EXPENSE_TOOLS | _EXPENSE_DRAFT_TOOLS:
         report = get_expense_report(arguments["report_id"])
         if report is not None and report["traveler_id"] != traveler_id:
-            return _scope_error("Employee chỉ được xem và rà soát báo cáo chi phí của chính mình. Mã báo cáo được yêu cầu không thuộc phạm vi của bạn. Hãy kiểm tra lại mã báo cáo hoặc nhờ Reviewer hỗ trợ.")
-            
-    # Từ chối nếu xem hồ sơ của nhân viên khác
+            return scope_error()
     elif tool_name == "get_traveler_profile" and arguments["traveler_id"] != traveler_id:
-        return _scope_error("Employee chỉ được xem hồ sơ công tác của chính mình. Hãy sử dụng tài khoản Reviewer nếu cần rà soát hồ sơ nhân viên khác.")
-        
-    # Đủ điều kiện ủy quyền -> Cho phép thực thi công cụ
+        return scope_error()
     return None
 
 

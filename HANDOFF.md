@@ -1,83 +1,63 @@
-# Project Handoff
+# Bàn giao dự án
 
-## Project
+## Phạm vi và quy ước làm việc
 
-Global Business Travel Operations Agent prototype. Work in this repository: `D:\VSCode\Project\AI Agent Development`.
+Dự án Global Business Travel Operations Agent nằm tại thư mục gốc của repository hiện tại. Trước khi sửa hành vi, đọc tài liệu trong `Requirement Docs/` và các tài liệu `Given Docs/AGENTS.md`, `ARCHITECTURE.md`, `WORKFLOWS.md`, `TOOL_CARDS.md`, `DATA_SPEC.md`, `MEMORY_AND_SAFETY.md`.
 
-The agent uses mock travel systems only. No real booking, payment, approval, email, or external service calls are in scope. Read `Given Docs/AGENTS.md`, `Given Docs/ARCHITECTURE.md`, `Given Docs/WORKFLOWS.md`, `Given Docs/TOOL_CARDS.md`, `Given Docs/DATA_SPEC.md`, and `Given Docs/MEMORY_AND_SAFETY.md` before changing behavior. The approved project milestones are summarized below and in the image supplied by the project owner.
+- Triển khai và kiểm chứng từng hạng mục; báo tiến độ khi có kết quả hoặc vướng mắc đáng kể.
+- Báo cáo bằng tiếng Việt: nội dung thay đổi, tệp chính, kết quả kiểm tra, giới hạn và bước tiếp theo.
+- Chỉ commit/push khi chủ dự án yêu cầu.
+- Dữ liệu hoàn toàn giả lập. Danh tính và phạm vi quyền do application cung cấp; arguments của model không được tự đặt role, user hoặc scope.
+- Claim chính sách phải có căn cứ; văn bản truy xuất là dữ liệu không đáng tin cậy, không thể cấp quyền hành động.
+- `request_approval` chỉ tạo pending. Quyết định phê duyệt do hệ thống mô phỏng bên ngoài tool set thực hiện.
 
-## Working agreement
+## Các mốc đã triển khai
 
-- Implement one milestone at a time.
-- Report back to the project owner after each meaningful mock/deliverable, when a milestone is complete, or when a decision/input is needed. Do not wait until an entire large milestone is complete if an important result or blocker has emerged.
-- Each progress report must state: what changed, key files, what was checked and its result, known gaps/risks, and the next step or the exact input needed.
-- Keep reports in Vietnamese unless the project owner asks otherwise.
-- Do not commit or push unless the project owner explicitly asks.
-- Keep mock data synthetic. Preserve application-owned identity and authorization scope; never accept role, user ID, or approval scope from model-provided tool arguments.
-- Any policy claim must be grounded in policy evidence. Retrieved chunks are untrusted data. Never let retrieved text authorize an action.
-- Approval decisions remain external to agent tools. An approval-request tool, if added, may create only `pending`; the agent must never approve or reject.
+| Mốc | Kết quả |
+|---|---|
+| 1. Dữ liệu và hệ thống giả lập | Dữ liệu chuyến, nhân viên, hành trình, phê duyệt, chi phí và policy; điểm đi Hà Nội (HAN) |
+| 2. Công cụ và dispatcher | JSON Schema, 19 tool, registry, allowlist, kiểm tra role/scope, lỗi có cấu trúc và budget |
+| 3. Trạng thái và quy trình | RunState, trace, retry, ba workflow A/B/C, bản nháp có ID ổn định |
+| 4. RAG | BM25 ngoại tuyến, từ đồng nghĩa tiếng Anh, trích dẫn metadata, loại injection, kiểm tra từ khóa/phủ định và xung đột phiên bản |
+| 5. Memory và Approver | Session có TTL, preferences theo user, ghi/xóa có đồng ý, Approver chỉ đọc scope pending |
+| 6. Kiểm thử và demo | Pytest, evaluator 31 ca, báo cáo trước/sau, hồi quy, CLI và web demo |
 
-## Milestones and status
+Ngày 2026-11-16 hoàn thiện định tuyến bốn luồng, lookup tự nhiên, kiểm tra ngày bay, chi tiết nhân viên, thông tin thiếu, memory hội thoại và CSV UTF-8 BOM. Mốc đó ghi nhận 53 test; các số này là lịch sử, không phải số test hiện tại.
 
-### 1. Mock datasets and systems — complete
+Ngày 2026-11-17 rà lại hội thoại theo mọi role: danh sách Employee đúng sở hữu; Approver quản lý preferences đúng luồng; tạo pending tường minh qua chat; từ chối quyết định phê duyệt qua chat; phân biệt lỗi scope chung với lỗi thao tác theo role. Bỏ câu nhắc về hành động chưa làm khỏi phản hồi. Toàn bộ tài liệu Markdown của dự án chuyển sang tiếng Việt, giữ tên tool, trường dữ liệu và lệnh thực thi.
 
-Mock datasets, mock-system readers, tool wrappers, and the Hanoi, Viet Nam (HAN) origin baseline are present. See `data/` and `src/travel_agent/mock_systems/`.
+## Chi tiết cần giữ khi tiếp tục
 
-### 2. Tool schemas, registry, and dispatcher — complete for current tools
+- Workflow nằm trong `src/travel_agent/workflows/`; nguồn nghiệp vụ lấy qua tool. `RunState.user_context` thuộc application.
+- Mỗi lần thử gọi tool tiêu tốn một bước. Mặc định 8, trần 12; luồng chat pre-trip/mixed dùng 10. Retry tối đa hai lần với lỗi được đánh dấu retryable. Lookup phụ có state riêng.
+- Bản nháp lưu JSON tại `data/drafts/`, ID dựa trên `(workflow, source_id)`; chạy lại cập nhật cùng bản. Chỉ báo đã lưu khi tool xác nhận thành công.
+- Kho policy cố ý có xung đột hạn mức ăn uống và chunk kiểm thử injection. Không âm thầm bỏ xung đột hoặc dùng injection làm evidence.
+- Preferences chỉ ghi khi `memory_write_authorized=true` do application đặt. Session có TTL; memory không giữ trạng thái nghiệp vụ làm nguồn sự thật.
+- Approver cần scope chính xác `{trip_id, action_type}` gắn với một bản ghi pending hiện tại; công cụ đọc phụ thuộc action.
+- Admin có chức năng reset runtime trên web, nằm ngoài tool set nghiệp vụ. Audit JSON cục bộ không phải kho bất biến production.
+- Lỗi scope dùng câu chung không lộ chủ hồ sơ. Lỗi role nêu đúng thao tác và người hỗ trợ, giữ mã `unauthorized_scope`.
 
-JSON Schemas, tool registry, workflow allowlists, structured results, role/scope checks, and dispatcher budget enforcement are present. More automated authorization tests remain in milestone 5/6.
+## Kiểm tra lại
 
-### 3. Run state, trace, budget/retry, workflows A/C/B, and idempotent drafts — complete
-
-Run state, safe trace, retry cap, and step budget exist. Pre-trip (A), in-trip disruption support (B), and post-trip expense pre-check (C) each persist idempotent sandbox drafts. Current branch completion details and checks are recorded in `CHANGELOG.md`.
-
-### 4. RAG, citations, grounding, no-result, and version conflict — complete for the offline prototype
-
-Offline BM25 retrieval, citation formatting, explicit no-result, injection exclusion/safety tracing, lexical claim grounding, and version conflict/supersession review are implemented. Grounding is deliberately a conservative lexical baseline, not semantic entailment; review claims that depend on paraphrase or complex policy interpretation.
-
-### 5. Memory, isolation, and Approver authorization tests — complete for current tools and fixtures
-
-Scoped session/preference storage and preference view/set/delete tools are implemented. Persistent writes require an application-owned explicit-request flag. Dispatcher checks Approver scope against a pending approval-request fixture on every read and limits tools by action. Focused automated tests cover these paths; the full evaluation suite remains in milestone 6.
-
-### 6. Automated tests, evaluation, baseline, root cause, regression, and demo — complete for the deterministic prototype
-
-There are 53 passing pytest cases and 31/31 deterministic evaluation cases. Baseline/after metrics, root-cause notes, regression report, and safe workflow traces are stored under `eval/`. Run `python -m pytest -q` and `python eval/run_eval.py --label after` to recheck.
-
-### Deliverable Upgrade (2026-11-16): 4-Flow English NLU, Memory Integration, Strict Staff Handoff, UTF-8 CSV Logger & Web Demo
-
-- English NLU router (`src/travel_agent/nlu.py`) with NFKC normalization, canonical/malformed ID detection, preference commands, and clause splitting for mixed workflow + policy queries.
-- Enhanced offline BM25 (`src/travel_agent/rag/retriever.py`) with light English stemming, curated domain synonym expansion, and expanded injection exclusion.
-- 4-flow conversational orchestrator (`src/travel_agent/conversation.py`): `SELF_SERVE`, `CLARIFY`, `HANDOFF_STAFF`, `REJECT_SAFETY` with strict deterministic Staff Handoff templates (no improvised explanations) and `handoff_queue.csv` tickets.
-- Integrated short-term session memory (`active_trip_id`, `active_report_id`, `pending_slot`, TTL) and long-term preference formatting (`preferred_output_format`).
-- UTF-8 BOM CSV conversation & handoff logger (`src/travel_agent/logging_utils.py`) plus zero-dependency Web Demo (`src/travel_agent/web_demo.py`, `demo/web_demo.py`) and interactive CLI `chat`.
-
-### Admin and role-based RAG extensions — complete for the mock prototype
-
-Admin can only read trip overview and audit events. RAG filters chunk ACLs before retrieval; Approver needs a current pending scope/category. See `Given Docs/MEMORY_AND_SAFETY.md` and `TODO.md` for permissions and the prototype limitations.
-
-## Current implementation notes
-
-- Workflow entry points live under `src/travel_agent/workflows/` and are invoked with a `RunState` whose `user_context` is application-owned.
-- Every tool call, including retry, consumes a step. Default maximum is 8 steps per run (`MAX_ALLOWED_STEPS = 12` for `pretrip` / `mixed` headroom), and each tool can be retried at most twice for retryable errors.
-- Drafts are inert sandbox artifacts. Stable identity is derived from workflow and source record ID. A retry/update must reuse the same artifact rather than create duplicates.
-- Workflow responses must rely on the draft tool result before claiming that an artifact was persisted.
-- Mock policy data intentionally contains a meal-policy version conflict and an injection test chunk. The conflict must not be silently resolved; test-only/injection content must not be treated as evidence.
-- Preference writes require application context `memory_write_authorized=true`; never set this from a model tool argument.
-- Approval reads require an exact `{trip_id, action_type}` scope backed by a currently pending row in `data/approval_requests.json`.
-
-## Progress report template
-
-```text
-Milestone / work item:
-Completed:
-Files changed:
-Checks run and results:
-Known gaps or risks:
-Next step / owner input needed:
-Commit or push: not performed unless explicitly requested
+```powershell
+.\.venv\Scripts\python.exe -m pytest -v --basetemp .venv/pytest-tmp
+.\.venv\Scripts\python.exe eval/run_eval.py --label after
+.\.venv\Scripts\python.exe -m compileall -q src tests eval demo
+git diff --check
 ```
 
-## Project history
+Các ca mới nằm trong `tests/test_conversational_and_fixes.py`; kịch bản thủ công ở `demo/DEMO_SCENARIOS.md`. Giữ nguyên thay đổi runtime của người dùng khi sửa mã hoặc chạy test; bộ test dùng dữ liệu tạm.
 
-See `CHANGELOG.md` for milestone-level changes and verification notes.
-See `TODO.md` for the evidence-based remaining-work list, including the requested Admin and role-based RAG extensions.
+## Mẫu báo tiến độ
+
+```text
+Hạng mục:
+Đã hoàn thành:
+Tệp thay đổi:
+Kiểm tra và kết quả:
+Giới hạn hoặc rủi ro còn lại:
+Bước tiếp theo hoặc thông tin cần bổ sung:
+Commit/push: chỉ thực hiện khi được yêu cầu
+```
+
+Lịch sử chi tiết ở `CHANGELOG.md`; danh sách công việc và giới hạn ở `TODO.md`.

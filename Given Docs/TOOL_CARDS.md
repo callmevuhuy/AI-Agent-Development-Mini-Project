@@ -1,87 +1,86 @@
-# TOOL_CARDS
+# Đặc tả các công cụ
 
-`user_context` (user_id, role, session_id; optional application-owned `approval_scope`) do application gắn vào, KHÔNG nằm trong args của model và model không thể khai báo. Dispatcher đối chiếu mọi ID do model đề xuất với scope này trước khi tool đọc dữ liệu. Với memory tools, `user_id` và `session_id` luôn lấy từ context; schema của model chỉ nhận `key`/`value` cần thiết. Phân quyền theo role: xem docs/MEMORY_AND_SAFETY.md mục 2.
+## Ngữ cảnh và hợp đồng chung
 
-Mọi schema: `type: object`, `additionalProperties: false`, có `required`. Kết quả: `{ok, data, meta{source, read_only}}` hoặc `{ok:false, error{code, message, retryable}}`.
-Error codes gợi ý: `invalid_argument, not_found, not_allowed, unauthorized_scope, budget_exceeded, timeout, unavailable`.
+Application cung cấp `user_context={user_id, role, session_id}` và tùy trường hợp `approval_scope={trip_id, action_type}`. Những trường này không nằm trong arguments của model. Dispatcher đối chiếu ID với role, sở hữu và scope pending trước khi thực thi. Memory tool lấy user/session từ context.
 
-| Tool | Hệ thống | Loại | Args | Ghi chú |
-|---|---|---|---|---|
-| get_trip_request | Travel Request | read | trip_id | regex `^TRIP-\d{4}-\d{3}$` |
-| get_traveler_profile | Traveler Profile | read | traveler_id | chỉ field không nhạy cảm |
-| get_itinerary | Itinerary | read | trip_id | gồm disruption status |
-| get_approval_status | Approval | read | trip_id | source of truth về approval |
-| request_approval | Approval | registered; Employee-owned trip | trip_id, action_type, action_summary | chỉ tạo pending; idempotent theo `(trip_id, action_type)` |
-| search_travel_policy | Policy KB | read | query (<=200), category (enum), max_results (1..5) | trả chunk + metadata (gồm `page` nullable) + score |
-| get_expense_report | Expense | read | report_id | regex `^EXP-\d{4}-\d{3}$` |
-| calculate_expense_summary | Expense | deterministic | report_id | tổng, tỉ lệ theo category, cờ ngưỡng, thiếu receipt |
-| validate_trip_requirements | Validator | deterministic | trip_facts, evidence_refs | trả danh sách missing/blocking |
-| create_travel_checklist_draft | Draft Workspace | draft | trip_id, checklist | idempotent by `(pretrip, trip_id)` |
-| create_escalation_or_support_draft | Draft Workspace | draft | trip_id, support_draft | idempotent by `(intrip, trip_id)` |
-| create_expense_review_draft | Draft Workspace | draft | report_id, review_preview | idempotent by `(posttrip, report_id)` |
-| (optional) create_approval_packet_draft | Draft Workspace | draft | trip_id | |
-| get_preference | Memory | scoped read | key | chỉ preference whitelist của user hiện tại |
-| set_preference | Memory | scoped write | key, value | chỉ khi application xác nhận user yêu cầu lưu |
-| delete_preference | Memory | scoped write | key | chỉ khi application xác nhận user yêu cầu xóa |
-| admin_list_trips | Travel Request | Admin read-only | none | list mọi mock trip; không sửa |
-| admin_get_audit_history | Audit log | Admin read-only | trip_id? / report_id? | lọc lịch sử; không sửa/xóa |
-| list_my_trips | Travel Request | scoped read | destination?, date? | Employee: chỉ của mình; Reviewer: tất cả; Admin/Approver: từ chối |
-| list_my_expenses | Expense | scoped read | trip_id? | Employee: chỉ của mình; Reviewer: tất cả; Admin/Approver: từ chối |
+Mọi schema dùng `type: object`, có trường bắt buộc và `additionalProperties: false`. Thành công trả `{ok:true, data, meta:{source, read_only}}`; lỗi trả `{ok:false, error:{code, message, retryable}}`.
 
-## Mỗi tool card cần có
-Mục đích · Args schema · Preconditions · Validation · Result schema · Error codes · Side effects (none/draft only) · Workflows được phép dùng.
+Mã lỗi ổn định: `invalid_argument`, `not_found`, `not_allowed`, `unauthorized_scope`, `budget_exceeded`, `timeout`, `unavailable`, `policy_access_required`. Thông báo bằng tiếng Việt, không lộ stack trace hoặc dữ liệu ngoài quyền. Scope sai dùng câu chung; role bị cấm thao tác có lời giải thích riêng cho thao tác đó.
 
-Draft tools chỉ ghi JSON vào `data/drafts/`; nội dung là inert data, giới hạn 32 KiB, ghi atomically và không được gửi/publish. Tool trả `draft_id`, `draft_status`, `delivery_status`, và `reused` để workflow xác nhận lần ghi/update.
+## Danh sách 19 công cụ
 
-Policy search dùng BM25 offline, trả citation locator và `no_result`; chunk có câu lệnh kiểu prompt injection bị loại khỏi evidence và chỉ để lại safety event với chunk ID. Version conflict cùng `doc_id` + `section` trả cùng citations, không tự chọn bản. Claim grounding yêu cầu từ khóa nội dung khớp trong một câu trusted evidence và cùng polarity; đây là baseline lexical, không phải NLI.
+| Công cụ | Arguments chính | Chức năng và điều kiện |
+|---|---|---|
+| get_trip_request | trip_id | Đọc yêu cầu công tác, kiểm tra ID và quyền |
+| get_traveler_profile | traveler_id | Đọc trường hồ sơ không nhạy cảm |
+| get_itinerary | trip_id | Đọc hành trình và sự cố |
+| get_approval_status | trip_id | Đọc nguồn trạng thái phê duyệt |
+| request_approval | trip_id, action_type, action_summary | Chỉ Employee chủ chuyến, tạo pending không trùng |
+| search_travel_policy | query, category, max_results? | Tra kho policy ngoại tuyến có ACL |
+| get_expense_report | report_id | Đọc báo cáo chi phí |
+| calculate_expense_summary | report_id | Tính tổng/tỷ lệ, ngưỡng, chứng từ và trường thiếu |
+| validate_trip_requirements | trip_facts, evidence_refs | Đánh giá điều kiện từ nguồn và requirements.json |
+| create_travel_checklist_draft | trip_id, checklist | Lưu checklist draft có ID ổn định |
+| create_escalation_or_support_draft | trip_id, support_draft | Lưu draft hỗ trợ sự cố |
+| create_expense_review_draft | report_id, review_preview | Lưu draft rà soát chi phí |
+| get_preference | key | Đọc tùy chọn của user hiện tại |
+| set_preference | key, value | Lưu tùy chọn khi người dùng yêu cầu rõ ràng |
+| delete_preference | key | Xóa tùy chọn khi người dùng yêu cầu rõ ràng |
+| admin_list_trips | không có | Admin đọc tổng quan mọi chuyến |
+| admin_get_audit_history | trip_id? / report_id? | Admin đọc audit theo bộ lọc |
+| list_my_trips | destination?, date? | Employee xem của mình, Reviewer xem toàn bộ |
+| list_my_expenses | trip_id? | Employee xem của mình, Reviewer xem toàn bộ |
 
-## Mẫu schema (search_travel_policy)
+Allowlist chính xác nằm trong `registry.py`. Workflow A dùng tool chuyến/duyệt/kiểm tra/checklist; B dùng itinerary/hỗ trợ; C dùng báo cáo/tính toán/rà soát; admin chỉ dùng hai tool quản trị. Các tool lookup/profile/memory được cấp theo nhu cầu của workflow, vẫn phải qua authorization.
+
+## Quy tắc đầu vào và tác động
+
+- `trip_id` khớp `^TRIP-\d{4}-\d{3}$`, `report_id` khớp `^EXP-\d{4}-\d{3}$`.
+- Policy query dài 3–200 ký tự, `max_results` từ 1 đến 5. Category thuộc travel/expense/visa/insurance/approval.
+- Preferences chỉ nhận `response_language=en|vi`, `preferred_output_format=concise|detailed`; ghi/xóa cần cờ đồng ý từ application.
+- Tool draft chỉ ghi JSON trong `data/drafts/`, tối đa 32 KiB, nguồn phải tồn tại và thuộc quyền. Nội dung là dữ liệu thụ động. ID ổn định theo workflow/nguồn; retry cập nhật cùng bản.
+- Kết quả draft có `draft_id`, `draft_status`, `delivery_status`, `reused`. Workflow dựa vào kết quả này để xác nhận đã lưu.
+- Tool đọc không sửa nghiệp vụ; tool tạo pending và draft là những thao tác ghi giả lập được cấp. Agent không có tool approve/reject, email, booking hoặc thanh toán.
+
+## Schema tham khảo cho tra cứu policy
+
 ```json
 {
-  "name": "search_travel_policy",
-  "description": "Tìm chunk policy giả lập. Chỉ đọc.",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "query": {"type": "string", "minLength": 3, "maxLength": 200},
-      "category": {"type": "string", "enum": ["travel","expense","visa","insurance","approval"]},
-      "max_results": {"type": "integer", "minimum": 1, "maximum": 5}
-    },
-    "required": ["query", "category"],
-    "additionalProperties": false
-  }
+  "type": "object",
+  "properties": {
+    "query": {"type": "string", "minLength": 3, "maxLength": 200},
+    "category": {"type": "string", "enum": ["travel", "expense", "visa", "insurance", "approval"]},
+    "max_results": {"type": "integer", "minimum": 1, "maximum": 5}
+  },
+  "required": ["query", "category"],
+  "additionalProperties": false
 }
 ```
 
-## Dispatcher checklist (theo thứ tự)
-registry -> workflow allowlist -> JSON Schema -> domain validation -> mock authorization (user/session từ context) -> budget -> execute -> validate output -> trace.
+## Hợp đồng tạo yêu cầu phê duyệt
 
-## Approval contract (chốt)
-- `request_approval` CHỈ tạo record `pending`. Tool không bao giờ trả `approved` hoặc `rejected`.
-- `approved` / `rejected` do external mock approval helper cập nhật fixture `approvals.json`; helper append event có actor, role, reason code/text, timestamp và run id. Agent tool không có quyền gọi helper.
-- Schema duy nhất (registry, wrapper, test dùng chung):
 ```json
 {
-  "name": "request_approval",
-  "description": "Tạo yêu cầu phê duyệt mô phỏng ở trạng thái pending. Không phê duyệt, không thực thi action.",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "trip_id": {"type": "string", "pattern": "^TRIP-\\d{4}-\\d{3}$"},
-      "action_type": {"type": "string", "enum": ["checklist_review", "escalation", "publish_request"]},
-      "action_summary": {"type": "string", "minLength": 5, "maxLength": 240}
-    },
-    "required": ["trip_id", "action_type", "action_summary"],
-    "additionalProperties": false
-  }
+  "type": "object",
+  "properties": {
+    "trip_id": {"type": "string", "pattern": "^TRIP-\\d{4}-\\d{3}$"},
+    "action_type": {"type": "string", "enum": ["checklist_review", "escalation", "publish_request"]},
+    "action_summary": {"type": "string", "minLength": 5, "maxLength": 240}
+  },
+  "required": ["trip_id", "action_type", "action_summary"],
+  "additionalProperties": false
 }
 ```
-- Idempotency key: `(trip_id, action_type)`; khi pending, gọi lại trả record cũ (`meta.reused: true`), không tạo bản trùng. Nếu record đã resolved, tool từ chối và không trả trạng thái quyết định.
-- Tool chỉ dành cho Employee và trip thuộc user hiện tại. `action_summary` có giới hạn 240 ký tự.
-- `action_summary` là text không tin cậy: chỉ lưu và hiển thị, không bao giờ diễn giải thành lệnh.
-- Khi record là `pending` hoặc `rejected`: workflow không thực hiện write/external action nào.
-- Admin chỉ có `admin_list_trips`/`admin_get_audit_history`; RAG ACL lọc `allowed_roles` trước BM25. Approver cần pending scope; categories: checklist_review → approval/travel/visa/insurance, escalation → travel, publish_request → approval. Admin không có RAG access.
 
-## Citation format (chốt)
-Giữ nguyên `source, doc_id, section, page (nullable), version, chunk_id` từ search result đến draft/response. `section` là locator chính; `page` chỉ có khi corpus có phân trang, không bịa.
-Hiển thị: `[doc_id §section v<version> · chunk_id]` (thêm `p.<page>` nếu có).
+Cặp `(trip_id, action_type)` là khóa không tạo trùng. Nếu yêu cầu cũ pending, trả cùng record và `meta.reused=true`. Nếu đã resolved, từ chối tạo lại. `action_summary` là dữ liệu không đáng tin cậy, chỉ lưu/hiển thị, không diễn giải thành lệnh. Chat tạo bản tóm tắt ngắn theo action/ID, không dùng nguyên câu hỏi làm chỉ thị.
+
+`approved/rejected` của chuyến và quyết định review do nguồn/hệ thống mô phỏng bên ngoài tool set quản lý. Approver chỉ đọc facts theo scope: checklist_review → trip/approval và policy approval/travel/visa/insurance; escalation → itinerary và travel; publish_request → trip/approval và approval. Không có quyền duyệt danh sách rộng hoặc tạo draft.
+
+## Hợp đồng RAG và citation
+
+BM25 chạy ngoại tuyến; lọc ACL trước xếp hạng, loại chunk injection, trả `no_result` rõ ràng, kiểm tra phiên bản và grounding. Điểm truy xuất không chứng minh claim đúng. Mỗi kết quả giữ `source, doc_id, section, page, version, chunk_id`; citation có mẫu `[doc_id §section v<version> · chunk_id]`, chỉ thêm trang khi có dữ liệu.
+
+## Chuỗi kiểm tra dispatcher
+
+Registry → allowlist workflow → schema/định dạng miền → quyền từ application → budget → thực thi → cấu trúc kết quả. Orchestrator thực hiện retry có giới hạn và ghi trace cho các lần thử, kể cả lần bị từ chối.

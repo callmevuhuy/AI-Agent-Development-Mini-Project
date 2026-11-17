@@ -80,6 +80,7 @@ _FORBIDDEN_COMMAND_PATTERNS = [
     r"\bsend\s+(?:an?\s+)?email\b",
     r"\b(?:dat|mua|thanh\s+toan)\s+(?:phong|ve|khach\s+san|chuyen\s+bay)\b",
     r"\bquet\s+the\b",
+    r"\b(?:phe\s+duyet|tu\s+choi)\s+(?:chuyen\s+di|bao\s+cao|yeu\s+cau|chi\s+phi)\b",
 ]
 
 _HANDOFF_PATTERNS = [
@@ -141,6 +142,8 @@ class RouteDecision:
     policy_category: str | None = None
     preference_cmd: dict[str, Any] | None = None
     admin_action: str | None = None
+    approval_action: str | None = None
+    draft_requested: bool = False
     reason: str = ""
 
 
@@ -323,6 +326,16 @@ def route_message_intent(message: str) -> RouteDecision:
     if any(re.search(p, norm) or re.search(p, clean) for p in _SAFETY_PATTERNS):
         return RouteDecision("REJECT_SAFETY", "safety_adversarial", reason="Adversarial or rule-bypass phrasing detected.")
 
+    # A pending request is distinct from an approval decision or staff handoff.
+    if (re.search(r"\b(?:request\s+(?:an?\s+)?approval|submit\s+(?:an?\s+)?approval\s+request|(?:yeu\s+cau|tao|gui)\s+(?:yeu\s+cau\s+)?phe\s+duyet)\b", clean)
+            and not _has_any(norm, ("policy", "chinh sach", "quy dinh", "what is", "what are", "la gi"))):
+        ids = extract_record_ids(message)
+        if ids["malformed_id"]:
+            return RouteDecision("REJECT_SAFETY", "invalid_id", malformed_id=ids["malformed_id"])
+        action = "escalation" if _has_any(norm, ("escalation", "disruption", "leo thang", "gian doan", "tre chuyen")) else (
+            "publish_request" if _has_any(norm, ("publish", "phat hanh")) else "checklist_review")
+        return RouteDecision("SELF_SERVE", "request_approval", trip_id=ids["trip_id"], approval_action=action)
+
     # 2. Explicit forbidden-action commands (must hand off, never execute or fabricate).
     is_policy_question = bool(
         re.search(r"\b(?:can\s+i|am\s+i|may\s+i|do\s+i|should\s+i|is\s+it\s+allowed|what\s+is\s+the\s+policy|policy\s+on)\b", norm)
@@ -332,7 +345,7 @@ def route_message_intent(message: str) -> RouteDecision:
         ids = extract_record_ids(message)
         return RouteDecision(
             "HANDOFF_STAFF",
-            "out_of_scope",
+            "approval_decision" if re.search(r"\b(?:approve|reject|sign\s+off|phe\s+duyet|tu\s+choi)\b", clean) else "out_of_scope",
             trip_id=ids["trip_id"],
             report_id=ids["report_id"],
             destination=extract_destination(norm),
@@ -427,6 +440,7 @@ def route_message_intent(message: str) -> RouteDecision:
             report_id=report_id,
             destination=dest,
             date_hint=date_hint,
+            draft_requested=_has_any(norm, ("create", "prepare", "tao", "chuan bi")),
         )
 
     # 10. Standalone Policy Q&A.

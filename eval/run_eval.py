@@ -194,13 +194,13 @@ def write_report(label: str, cases: list[dict], metrics: dict) -> Path:
     reports.mkdir(parents=True, exist_ok=True)
     path = reports / f"{label}.md"
     lines = [
-        f"# Evaluation — {label}", "", "Deterministic mock evaluation; no live services or real employee data.",
-        "", "## Metrics", "", "| Metric | Result |", "|---|---:|",
+        f"# Đánh giá — {'ban đầu' if label == 'baseline' else 'sau sửa' if label == 'after' else label}", "", "Đánh giá bằng dữ liệu giả lập và quy tắc xác định; không dùng dịch vụ trực tuyến hoặc dữ liệu nhân viên thật.",
+        "", "## Chỉ số", "", "| Chỉ số kỹ thuật | Kết quả |", "|---|---:|",
     ]
     lines.extend(f"| {key} | {value} |" for key, value in metrics.items())
-    lines.extend(["", "## Cases", "", "| Case | Result | Detail |", "|---|---|---|"])
-    lines.extend(f"| {c['case_id']} | {'PASS' if c['passed'] else 'FAIL'} | {c['detail']} |" for c in cases)
-    lines.extend(["", "## Interpretation", "", "Tool/argument accuracy uses the deterministic planner routing examples. Grounding/citation accuracy checks the single representative claim case; it is not a broad semantic benchmark.", ""])
+    lines.extend(["", "## Các ca kiểm thử", "", "| Mã ca | Kết quả | Chi tiết |", "|---|---|---|"])
+    lines.extend(f"| {c['case_id']} | {'ĐẠT' if c['passed'] else 'KHÔNG ĐẠT'} | {c['detail'].replace('No tool call executed', 'Không thực thi công cụ').replace('Untrusted chunk excluded', 'Đã loại đoạn văn bản không đáng tin cậy').replace('steps=', 'số bước=').replace('attempts=', 'số lần thử=').replace('citations=', 'số trích dẫn=')} |" for c in cases)
+    lines.extend(["", "## Cách diễn giải", "", "Độ chính xác chọn tool và arguments được đo trên ví dụ định tuyến của planner quy tắc. Độ đúng căn cứ/citation chỉ kiểm tra một claim đại diện, không phải đánh giá ngữ nghĩa trên diện rộng. Mã case, trường dữ liệu và trạng thái kỹ thuật được giữ nguyên để đối chiếu kết quả JSON.", ""])
     path.write_text("\n".join(lines), encoding="utf-8")
     (reports / f"{label}.json").write_text(json.dumps({"metrics": metrics, "cases": cases}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path
@@ -217,13 +217,13 @@ def write_regression() -> Path:
     new_cases = sorted(after_cases.keys() - before_cases.keys())
     removed_cases = sorted(before_cases.keys() - after_cases.keys())
     lines = [
-        "# Regression report", "",
-        "The baseline is the first recorded evaluation after the implementation work. No earlier numeric benchmark was archived, so this compares that baseline with the post-fix verification run rather than claiming a historical pre-change improvement.",
-        "", f"- Baseline: {baseline['metrics']['passed']}/{baseline['metrics']['case_count']} passed.",
-        f"- After: {after['metrics']['passed']}/{after['metrics']['case_count']} passed.",
-        f"- Regressions: {len(regressions)}; improvements: {len(improvements)}; new cases: {len(new_cases)}; removed cases: {len(removed_cases)}.",
-        f"- Changed cases: regressions={regressions or 'none'}, improvements={improvements or 'none'}, new={new_cases or 'none'}, removed={removed_cases or 'none'}.",
-        "", "| Metric | Baseline | After | Delta |", "|---|---:|---:|---:|",
+        "# Báo cáo kiểm tra hồi quy", "",
+        "Baseline là lần đo đầu tiên được lưu sau khi triển khai. Không có số đo cũ hơn để khẳng định mức cải thiện trước triển khai; báo cáo chỉ so sánh baseline đã lưu với lần kiểm tra sau sửa.",
+        "", f"- Ban đầu: {baseline['metrics']['passed']}/{baseline['metrics']['case_count']} ca đạt.",
+        f"- Sau sửa: {after['metrics']['passed']}/{after['metrics']['case_count']} ca đạt.",
+        f"- Hồi quy: {len(regressions)}; cải thiện: {len(improvements)}; ca mới: {len(new_cases)}; ca đã bỏ: {len(removed_cases)}.",
+        f"- Chi tiết thay đổi: hồi quy={regressions or 'không có'}, cải thiện={improvements or 'không có'}, mới={new_cases or 'không có'}, bỏ={removed_cases or 'không có'}.",
+        "", "| Chỉ số kỹ thuật | Ban đầu | Sau sửa | Chênh lệch |", "|---|---:|---:|---:|",
     ]
     for key, old in baseline["metrics"].items():
         new = after["metrics"].get(key)

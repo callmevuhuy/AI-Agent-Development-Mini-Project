@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from travel_agent.errors import ERROR_MESSAGES, error_text
+from travel_agent.errors import ERROR_MESSAGES, error_text, role_error
 from travel_agent.logging_utils import log_chat_turn
 from travel_agent.memory import (
     delete_session_value,
@@ -316,9 +316,9 @@ def _format_handoff_response(
         lines.extend(["", f"Trích dẫn đã ghi nhận (Recorded Citations): {' ; '.join(citations[:limit])}" if is_vi else f"Recorded Citations: {' ; '.join(citations[:limit])}"])
     lines.extend([
         "",
-        "Bước tiếp theo: Yêu cầu được lưu trong hàng đợi demo để Travel Operations xem xét. Agent chưa thực hiện đặt chỗ, thanh toán hay quyết định phê duyệt."
+        "Bước tiếp theo: Yêu cầu được lưu trong hàng đợi demo để Travel Operations xem xét."
         if is_vi
-        else "Next Step: This case is queued for Travel Operations Staff. No automated booking, payment, or approval decision was made.",
+        else "Next Step: This case is queued for Travel Operations Staff.",
     ])
     return "\n".join(lines)
 
@@ -337,9 +337,9 @@ def _format_workflow_success(
     msg = result.get("message", "")
     if is_vi:
         if workflow == "pretrip":
-            msg = "Kế hoạch công tác và danh sách checklist tuân thủ đã sẵn sàng trong sandbox; không thực hiện đặt phòng hay thanh toán tự động."
+            msg = "Checklist chuẩn bị chuyến công tác đã sẵn sàng."
         elif workflow == "intrip":
-            msg = "Hướng dẫn xử lý gián đoạn chuyến bay đã sẵn sàng; hệ thống không tự ý đặt vé, chi tiêu hay liên hệ bên ngoài."
+            msg = "Hướng dẫn xử lý sự cố chuyến bay đã sẵn sàng."
         elif workflow == "posttrip":
             msg = "Kiểm toán báo cáo chi phí hoàn tất đối chiếu với các định mức chính sách doanh nghiệp."
 
@@ -714,14 +714,17 @@ def _handle_admin_overview(
     decision: RouteDecision,
     is_vi: bool = False,
 ) -> tuple[str, str, RunState]:
-    if user["role"] == "Reviewer" and decision.admin_action == "trips":
+    if user["role"] in {"Employee", "Reviewer"} and decision.admin_action == "trips":
         state = RunState("pretrip", user_context, phase="reviewer_trip_list")
         args = {"destination": decision.destination} if decision.destination else {}
         res = run_tool(state, "list_my_trips", args)
         state.finish("completed" if res.get("ok") else "failed_validation")
+        if not res.get("ok"):
+            return "REJECT_SAFETY", "", state
         rows = res.get("data", []) if res.get("ok") else []
         cache: dict[str, str] = {}
-        header = f"[REVIEWER | TOÀN BỘ CHUYẾN ĐI CỦA NHÂN VIÊN ({len(rows)})]" if is_vi else f"[REVIEWER | ALL EMPLOYEE TRIPS ({len(rows)})]"
+        label = "CHUYẾN ĐI CỦA BẠN" if user["role"] == "Employee" else "TOÀN BỘ CHUYẾN ĐI CỦA NHÂN VIÊN"
+        header = f"[{user['role'].upper()} | {label} ({len(rows)})]"
         lines = [header, ""]
         for t in rows:
             tid = t.get("traveler_id")
@@ -775,7 +778,7 @@ def _handle_approver_turn(
     approval_scope: dict[str, str] | None,
     is_vi: bool = False,
 ) -> tuple[str, str, str, list[str], str, RunState]:
-    if decision.intent in {"posttrip", "admin_overview"} or decision.report_id:
+    if decision.intent in {"posttrip", "admin_overview", "request_approval"} or decision.report_id or decision.draft_requested:
         state = RunState("pretrip", user_context, phase="approver_role_boundary")
         state.finish("failed_validation")
         return "REJECT_SAFETY", "failed_validation", "", [], "", state
@@ -794,7 +797,7 @@ def _handle_approver_turn(
     scoped_ctx = {**user_context, "approval_scope": approval_scope}
     trip_id = decision.trip_id or approval_scope["trip_id"]
     action_type = approval_scope["action_type"]
-    wf = "intrip" if action_type == "escalation" else "pretrip"
+    wf = "intrip" if action_type == "escalation" or decision.intent == "intrip" else "pretrip"
     state = RunState(wf, scoped_ctx, phase="approver_scoped_review")
 
     if decision.intent == "policy_qa":
@@ -807,11 +810,17 @@ def _handle_approver_turn(
             state.finish("failed_validation")
             err = "Danh mục chính sách yêu cầu nằm ngoài phạm vi phê duyệt của bạn." if is_vi else "Requested policy category is outside your Approver scope."
             return "REJECT_SAFETY", "failed_validation", "", [], err, state
+        data = res["data"]
+        if data.get("no_result") or not data.get("results") or data.get("version_conflicts"):
+            state.finish("needs_human")
+            cits = [v["citation"] for c in data.get("version_conflicts", []) for v in c.get("versions", []) if v.get("citation")]
+            reason = "Căn cứ chính sách thiếu hoặc có xung đột phiên bản. Cần Travel Operations xem xét."
+            return "HANDOFF_STAFF", "needs_human", "", cits, reason, state
         state.finish("completed")
         text, cits = _format_policy_qa(res["data"], "detailed", is_vi=is_vi)
         return "SELF_SERVE", "completed", text, cits, "", state
 
-    read_tool = "get_itinerary" if action_type == "escalation" else "get_trip_request"
+    read_tool = "get_itinerary" if action_type == "escalation" or decision.intent == "intrip" else "get_trip_request"
     res = run_tool(state, read_tool, {"trip_id": trip_id})
     if not res.get("ok"):
         state.finish("failed_validation")
@@ -861,12 +870,6 @@ def _handle_approver_turn(
                 f"  - Schedule: {_fmt_iso_dt(flight.get('departure'))} to {_fmt_iso_dt(flight.get('arrival'))}",
                 f"  - Flight Status: {_human_flight_status(flight.get('status'), disruption)}",
             ])
-    notice = (
-        "Thông báo ranh giới (Boundary Notice): Giao diện agent dành cho Approver chỉ đọc; quyết định phê duyệt diễn ra bên ngoài các công cụ agent."
-        if is_vi
-        else "Boundary Notice: Approver agent view is strictly read-only; decisions occur outside agent tools."
-    )
-    lines.extend(["", notice])
     state.finish("completed")
     return "SELF_SERVE", "completed", "\n".join(lines), [], "", state
 
@@ -931,7 +934,14 @@ def handle_turn(
     state: RunState
 
     # Role-specific routing for Admin & Approver before Employee/Reviewer workflows.
-    if user["role"] == "Admin" and intent not in {"greeting", "safety_adversarial", "handoff_requested", "admin_overview"}:
+    if intent == "approval_decision":
+        route = "REJECT_SAFETY"
+        state = RunState("pretrip", user_context, phase="approval_decision_boundary")
+        state.finish("failed_validation")
+        outcome = "failed_validation"
+        bot_response = ""
+        _audit_chat_event(user, state, decision.trip_id, decision.report_id, "approval_decision_denied")
+    elif user["role"] == "Admin" and route != "REJECT_SAFETY" and intent not in {"greeting", "handoff_requested", "out_of_scope", "admin_overview"}:
         route = "REJECT_SAFETY"
         state = RunState("admin", user_context, phase="admin_boundary")
         state.finish("failed_validation")
@@ -946,7 +956,7 @@ def handle_turn(
             )
         )
         _audit_chat_event(user, state, decision.trip_id, decision.report_id, "admin_boundary_enforced")
-    elif user["role"] == "Approver" and intent not in {"greeting", "safety_adversarial", "handoff_requested"}:
+    elif user["role"] == "Approver" and route != "REJECT_SAFETY" and intent not in {"greeting", "handoff_requested", "out_of_scope", "preference"}:
         route, outcome, bot_response, citations, handoff_reason, state = _handle_approver_turn(
             user, user_context, decision, approval_scope, is_vi=is_vi
         )
@@ -1012,11 +1022,46 @@ def handle_turn(
             )
         _audit_chat_event(user, state, None, None, "clarification_requested")
 
+    elif route == "SELF_SERVE" and intent == "request_approval":
+        workflow_name = "request_approval"
+        state = RunState("intrip" if decision.approval_action == "escalation" else "pretrip", user_context, phase="approval_request")
+        if user["role"] != "Employee":
+            state.finish("failed_validation")
+            route, outcome = "REJECT_SAFETY", "failed_validation"
+            result_payload = {"outcome": outcome, "error": role_error(user["role"], "request_approval")["error"]}
+            bot_response = ""
+        elif not decision.trip_id:
+            state.finish("needs_input")
+            route, outcome = "CLARIFY", "needs_input"
+            bot_response = "Hãy cung cấp mã chuyến đi TRIP-YYYY-NNN cần tạo yêu cầu phê duyệt."
+        else:
+            res = run_tool(state, "request_approval", {
+                "trip_id": decision.trip_id, "action_type": decision.approval_action or "checklist_review",
+                "action_summary": f"Yêu cầu xem xét {decision.approval_action or 'checklist_review'} cho {decision.trip_id}.",
+            })
+            outcome = "awaiting_approval" if res.get("ok") else "failed_validation"
+            state.finish(outcome)
+            if res.get("ok"):
+                result_payload = {"outcome": outcome, "approval_request": res["data"]}
+                bot_response = f"Yêu cầu phê duyệt cho {decision.trip_id} ({decision.approval_action}) đang chờ người phụ trách xem xét."
+            else:
+                route = "REJECT_SAFETY"
+                result_payload = {"outcome": outcome, "error": res["error"]}
+                bot_response = ""
+        _audit_chat_event(user, state, decision.trip_id, None, "approval_request")
+
     elif route == "SELF_SERVE" and intent == "greeting":
         state = RunState("pretrip", user_context, phase="direct_reply")
         state.finish("completed")
         outcome = "completed"
-        if is_vi:
+        if user["role"] in {"Admin", "Approver"}:
+            capabilities = (
+                "Xem danh sách chuyến đi, audit log và tải log CSV."
+                if user["role"] == "Admin" else
+                "Xem hồ sơ và chính sách trong phạm vi phê duyệt đang chờ; quản lý tùy chọn cá nhân."
+            )
+            bot_response = f"Xin chào ({user['user_id']} · {user['role']})!\n\n{capabilities}"
+        elif is_vi:
             bot_response = (
                 f"Xin chào ({user['user_id']} · {user['role']})!\n\n"
                 "Tôi có thể hỗ trợ bạn:\n"
@@ -1220,7 +1265,9 @@ def handle_turn(
         code = result_payload["error_code"]
         response_error = {"code": code, "message": ERROR_MESSAGES.get(code, ERROR_MESSAGES["unavailable"]), "retryable": False}
     last_observation = state.safe_tool_results[-1] if state.safe_tool_results else {}
-    if not response_error and outcome != "completed" and last_observation.get("ok") is False:
+    if (not response_error and last_observation.get("ok") is False
+            and (route == "REJECT_SAFETY" or outcome in {"partial", "failed_budget", "failed_delivery", "failed_validation"}
+                 or workflow_name in {"policy_qa", "preference"})):
         response_error = {
             "code": last_observation["error_code"],
             "message": last_observation["error_message"],
@@ -1232,9 +1279,13 @@ def handle_turn(
         elif intent == "safety_adversarial":
             code, detail = "not_allowed", "Yêu cầu chứa chỉ thị bỏ qua quy tắc an toàn hoặc vượt quyền. Hãy gửi lại tác vụ công tác trong phạm vi được cấp."
         elif state.phase == "admin_boundary":
-            code, detail = "unauthorized_scope", "Admin chỉ được xem tổng quan chuyến đi và audit log; không được chạy workflow, tra cứu chính sách hay truy cập bộ nhớ. Hãy chọn Employee hoặc Reviewer cho tác vụ nghiệp vụ."
+            action = intent if intent in {"pretrip", "intrip", "posttrip", "policy_qa", "preference", "request_approval"} else "pretrip"
+            code, detail = "unauthorized_scope", role_error("Admin", action)["error"]["message"]
         elif state.phase == "approver_role_boundary":
-            code, detail = "unauthorized_scope", "Approver chỉ được xem thông tin chuyến đi và chính sách thuộc approval scope đang chờ; không được rà soát báo cáo chi phí hay xem audit log. Hãy chọn Employee, Reviewer hoặc Admin phù hợp với chức năng cần dùng."
+            action = ("audit" if decision.admin_action == "audit" else "trip_list") if intent == "admin_overview" else intent
+            code, detail = "unauthorized_scope", role_error("Approver", action)["error"]["message"]
+        elif state.phase == "approval_decision_boundary":
+            code, detail = "unauthorized_scope", role_error(user["role"], "approval_decision")["error"]["message"]
         else:
             code = result_payload.get("error_code", "invalid_argument")
             detail = ERROR_MESSAGES.get(code, ERROR_MESSAGES["unavailable"])

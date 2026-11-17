@@ -1,78 +1,79 @@
-# PLAN — Global Business Travel Operations Agent
+# Kế hoạch và quyết định thiết kế
 
-## 1. Quyết định thiết kế chính
-| Vấn đề | Quyết định | Lý do |
+## 1. Lựa chọn chính
+
+| Vấn đề | Lựa chọn hiện tại | Lý do |
 |---|---|---|
-| Ngôn ngữ | Python 3.11 | Dễ làm mock, jsonschema, pytest |
-| LLM | Interface 2 backend: `RuleBasedPlanner` (deterministic) + LLM thật tùy chọn | Test/eval chạy lặp lại được, không cần API key |
-| Retrieval | BM25 hoặc TF-IDF offline + metadata filter theo category | Rẻ, chạy offline, dễ giải thích |
-| Mock data | JSON files | Đơn giản, dễ review, không phải prompt chứa facts |
-| Điều phối | Orchestrator = state machine theo phase, mỗi workflow một module | Dễ trace, dễ test transition |
-| Draft | Ghi file JSON/MD vào `data/drafts/`, ID ổn định | Idempotent, an toàn |
+| Ngôn ngữ | Python 3.11 trở lên | Thuận tiện cho mock, JSON Schema và pytest |
+| Planner | Quy tắc xác định; LLM thật chưa triển khai | Test lặp lại được, không cần API key |
+| Truy xuất | BM25 ngoại tuyến, lọc category và ACL | Dễ giải thích và kiểm chứng |
+| Lưu trữ | File JSON/CSV cục bộ | Phù hợp nguyên mẫu, dễ xem dữ liệu |
+| Điều phối | Theo phase, mỗi workflow một module | Dễ truy vết điều kiện dừng |
+| Bản nháp | JSON với ID ổn định và ghi nguyên tử | Thử lại không tạo trùng |
 
-## 2. Phân công deterministic vs LLM
-- Deterministic (chạy được khi bỏ LLM): validate ID, dispatcher, allowlist, schema, tính tổng/tỉ lệ/cờ vượt ngưỡng, approval gate, state transition, idempotent draft, trace.
-- LLM-assisted (có fallback template): trích `trip_id/report_id` từ câu tự nhiên, chọn tool đề xuất, viết narrative trong draft, query rewrite, giải thích cho user.
+## 2. Phần xác định và phần có thể mở rộng bằng LLM
 
-## 3. Lộ trình đầy đủ (10 ngày làm việc)
-Kế hoạch mặc định triển khai đủ phạm vi mini-project. Rubric tính một lần theo 7 hạng mục của đề bài, tổng 100%: framing 10%, mock systems/function calling 20%, workflow/state 15%, RAG 15%, memory/safety 15%, automation/drafts 10%, evaluation/debugging 15%.
+Kiểm tra ID, schema, quyền, tính toán, approval gate, trạng thái, budget, retry, draft và trace phải chạy bằng code ngay cả khi không có LLM. Các việc như nhận diện cách diễn đạt, đề xuất tool, viết lời giải thích và rewrite có thể dùng LLM về sau nhưng vẫn phải qua cùng dispatcher và kiểm tra evidence. Hiện các phần này dùng quy tắc/template.
 
-| Ngày | Việc | Output | Rubric |
-|---|---|---|---|
-| 1 | Đọc spec, chốt contract, dựng skeleton repo, rà kiến trúc và quyền | skeleton + docs đã chốt | Framing 10% |
-| 2 | Dataset (6 trips, 4 travelers, 4 itineraries, 3 expenses, policy corpus) + mock systems | `data/`, `mock_systems/` | Phần đầu của Mock/FC |
-| 3 | Tool wrappers + JSON Schemas + registry + dispatcher + error contract | `tools/`, `schemas/` | Mock systems & function calling 20% (ngày 2–3) |
-| 4 | State, trace, budget, retry, terminal outcomes | `state.py`, `trace.py` | Nền tảng Workflow/state 15% |
-| 5 | Workflow C rồi A, có dependency và stop conditions | 2 workflow end-to-end | Phần Workflow/state |
-| 6 | Workflow B + approval simulation + ít nhất 3 loại draft + idempotency | 3 workflow end-to-end, drafts | Automation/drafts 10% |
-| 7 | RAG: retriever, citation, claim-evidence check, no-result, injection chunk, version conflict | `rag/` | RAG/grounding 15% |
-| 8 | Memory: session, preference view/delete, isolation; hoàn tất role-scope safety | `memory/`, safety cases | Memory/safety 15% |
-| 9 | Ít nhất 15 test cases, eval runner, đủ metrics, baseline report, root cause | `eval/reports`, traces | Evaluation/debugging 15% |
-| 10 | Sửa theo root cause, after/regression report, README, demo ba workflow, limitations | deliverables hoàn chỉnh | Chốt và kiểm tra toàn rubric |
+## 3. Lộ trình mười ngày ban đầu
 
-### Nhánh rút gọn khi thời gian bị giới hạn
-Rút ngắn độ polish, không bỏ acceptance floor: cả ba workflow chạy end-to-end; dispatcher/schema/authorization/budget/trace; RAG có citation và no-result; memory/isolation; ít nhất ba draft; 15 test bắt buộc; metrics, baseline/after/regression dạng gọn và demo ngắn. Có thể hoãn backend LLM thật, dữ liệu vượt mức tối thiểu, tối ưu retrieval và artifact tùy chọn. Không hoãn Workflow B, memory/isolation hoặc safety tests.
+| Ngày | Công việc | Sản phẩm và hạng mục chấm |
+|---|---|---|
+| 1 | Đọc đề, chốt hợp đồng và kiến trúc | Khung mã/tài liệu; xác định bài toán 10% |
+| 2 | Dữ liệu tối thiểu và mock systems | 6 chuyến, 4 nhân viên, ít nhất 4 itinerary, 3 báo cáo, kho policy |
+| 3 | Wrapper, schema, registry, dispatcher | Hệ thống giả lập/function calling 20%, tính chung ngày 2–3 |
+| 4 | State, trace, budget, retry, kết quả cuối | Nền tảng workflow/trạng thái 15% |
+| 5 | Quy trình C rồi A | Hai luồng chạy xuyên suốt |
+| 6 | Quy trình B, approval và ba draft | Tự động hóa/bản nháp 10% |
+| 7 | RAG, citation, căn cứ, injection, phiên bản | Truy xuất/căn cứ 15% |
+| 8 | Memory, đồng ý, cách ly và role/scope | Memory/an toàn 15% |
+| 9 | Ít nhất 15 ca, evaluator và nguyên nhân gốc | Đánh giá/gỡ lỗi 15% |
+| 10 | Sửa lỗi, báo cáo sau sửa/hồi quy và demo | Kiểm tra toàn bộ tiêu chí |
 
-## 4. Milestone kiểm tra
-- M1 (cuối ngày 3): gọi tool qua dispatcher, bị từ chối đúng với tool lạ/field lạ/ID sai.
-- M2 (cuối ngày 6): 3 workflow chạy end-to-end với planner rule-based.
-- M3 (cuối ngày 8): citation truy vết được, isolation pass.
-- M4 (cuối ngày 10): acceptance tests, reports before/after and regression comparison.
+Nếu thiếu thời gian, giảm độ trau chuốt hoặc backend tùy chọn; không bỏ ba workflow, dispatcher/schema/quyền/budget/trace, RAG có citation/kết quả rỗng, memory/cách ly, ba draft và các test bắt buộc. Bảy trọng số chỉ tính một lần, tổng 100%.
 
-## 4.1 Trạng thái repo (2026-11-16)
-- Mốc 1–5: mock systems, schemas/dispatcher (19 tools), ba workflow, draft idempotency, offline RAG (stemming + domain synonyms + ACL), scoped memory (kèm TTL), Approver scope và Admin/RAG ACL đã triển khai.
-- Mốc 6 & Gói hoàn thiện bàn giao: 53 automated pytest cases và 31/31 evaluation cases (`eval/reports/`), English NLU router (`nlu.py`) hỗ trợ tra cứu tự nhiên không cần ID, 4-flow orchestrator (`conversation.py`) kèm strict Staff Handoff, UTF-8 BOM CSV logger (`logging_utils.py`), và zero-dependency Web Demo UI (`web_demo.py`).
-- Có application CLI (`message`, `chat`, `run`, `handoffs`, `logs`, `web`) và deterministic NLU cho request tiếng Anh; không có LLM backend thật (test chạy hoàn toàn offline).
-- Baseline được đo lần đầu ở mốc 25 cases; bản `after` đạt 31/31 (0 regression).
-- Admin read-only, append-only local audit events, và role-filtered RAG được kiểm tra trong tests; Web Demo bổ sung endpoint reset dữ liệu runtime (`POST /api/admin/reset`) và xuất CSV chỉ dành cho Admin (không nằm trong agent tool set).
+## 4. Mốc kiểm tra và trạng thái
 
-## 5. Rủi ro và cách giảm
-| Rủi ro | Giảm thiểu |
+- M1: gọi tool qua dispatcher, chặn tool/trường lạ và ID sai.
+- M2: ba quy trình chạy xuyên suốt với planner quy tắc.
+- M3: citation truy vết được, memory và scope cách ly đúng.
+- M4: test nghiệm thu, số đo, nguyên nhân gốc, báo cáo trước/sau/hồi quy, demo.
+
+Các mốc cốt lõi đã triển khai. Ngày 2026-11-16 có 53 test và 31/31 ca đánh giá, lookup tự nhiên, memory hội thoại, CSV và web demo. Ngày 2026-11-17 rà lại ma trận role/thao tác, sửa các luồng chat bị định tuyến sai, bỏ câu nhắc thừa trong phản hồi và Việt hóa toàn bộ Markdown. Xem pytest và báo cáo sau sửa để biết kết quả hiện tại; số test của các mốc cũ chỉ mang ý nghĩa lịch sử.
+
+## 5. Rủi ro và giảm thiểu
+
+| Rủi ro | Biện pháp và giới hạn |
 |---|---|
-| LLM output không ổn định | Planner rule-based cho test; LLM chỉ là backend tùy chọn |
-| Retrieval đúng score nhưng sai claim | Bước claim-to-evidence check riêng |
-| Quá nhiều scope | Làm theo thứ tự ưu tiên ở mục 3 |
-| Draft duplicate khi retry | `draft_id = hash(workflow, source_id)` + upsert |
-| Lộ PII/secret trong trace | Whitelist field khi ghi trace, test kiểm tra |
+| Diễn đạt không khớp mẫu | Planner quy tắc ổn định nhưng chưa hiểu ngôn ngữ tổng quát |
+| Điểm truy xuất cao nhưng claim sai | Kiểm tra claim/evidence riêng; hiện chỉ là baseline từ khóa |
+| Mở rộng quá phạm vi | Ưu tiên mốc nghiệm thu, giữ thao tác tác động ở draft/pending |
+| Retry tạo trùng draft | ID từ workflow/nguồn, cập nhật cùng bản |
+| Lộ thông tin trong lỗi | Scope dùng thông báo chung, trace và CSV lọc trường/mẫu nhạy cảm |
+| Nhầm thao tác theo role | Ma trận chat cả happy case và ca bị từ chối; lỗi nêu đúng thao tác |
+| Báo cáo lại thành tiếng Anh | Bộ sinh báo cáo dùng tiếng Việt, giữ mã trường và case |
 
-## 6. Trả lời nhanh câu tự kiểm tra (cần chốt trước khi nộp)
-1. Bỏ LLM: validation, dispatcher, tính toán expense, approval gate, state, draft idempotent vẫn chạy.
-2. "Có thể được xem xét" ≠ "đã duyệt": chỉ approval system trả `approved` mới được nói đã duyệt.
-3. Itinerary mới từ mock API thắng session summary cũ (source of truth).
-4. Tool/field ngoài contract: từ chối trước execution, trả `failed_validation`, ghi trace.
-5. Không có evidence: nói rõ không tìm thấy policy liên quan, đề nghị needs_human; không suy đoán, không tạo citation.
-6. Trace phải có phase, tool, args an toàn, observation status, transition, budget, outcome để phân biệt lỗi routing / tool / state.
+## 6. Câu tự kiểm tra
 
-## 7. Decisions Log
-| # | Quyết định | Ảnh hưởng |
+1. Bỏ LLM: validation, dispatcher, tính chi phí, approval gate, state và draft vẫn chạy.
+2. Policy nói có thể xem xét không đồng nghĩa đã duyệt; chỉ nguồn approval được xác nhận mới quyết định trạng thái.
+3. Itinerary mới từ mock tool ưu tiên hơn ngữ cảnh cũ.
+4. Tool/trường ngoài hợp đồng bị chặn trước thực thi và có trace.
+5. Không có evidence thì nói rõ giới hạn, cần người kiểm tra, không suy đoán hoặc tạo citation.
+6. Trace phải giúp phân biệt lỗi định tuyến, trích tham số, tool, xử lý observation, trạng thái, retry, căn cứ và an toàn.
+
+## 7. Nhật ký quyết định
+
+| Mã | Quyết định | Tác động |
 |---|---|---|
-| D1 | `request_approval` chỉ tạo `pending`; `approved/rejected` đến từ fixture approval | Agent không tự duyệt; PDF vẫn đủ 3 trạng thái ở approval system |
-| D2 | Schema duy nhất `request_approval(trip_id, action_type, action_summary)`; idempotent theo `(trip_id, action_type)` | Registry, wrapper, test dùng chung (TOOL_CARDS) |
-| D3 | Role matrix Employee/Reviewer/Approver + `users.json`; `user_context` do application gắn | Dispatcher có mock authorization rõ ràng (MEMORY_AND_SAFETY) |
-| D4 | Thêm ARCHITECTURE.md với sơ đồ tổng thể và 3 workflow dọc (Mermaid) | Đáp ứng deliverable 5 |
-| D5 | Citation: `section` là locator chính, `page` nullable; format `[doc_id §section v<version> · chunk_id]` | Khớp PDF, không bịa số trang |
-| D6 | Tách `trip_approval_status` và `draft_status`; outcome `awaiting_approval` chỉ khi có approval pending thật | Hết nhập nhằng |
-| D7 | `requirements.json` định nghĩa evidence đủ theo destination | `validate_trip_requirements` thật sự deterministic |
-| D8 | Version conflict: mặc định `needs_human`; chỉ ưu tiên bản mới khi bản cũ `superseded` | T09 kiểm thử được |
-| D9 | Rubric bám đúng 7 trọng số của đề bài; hạng mục mock/function calling chỉ tính một lần | Tổng trọng số luôn 100% |
-| D10 | Approver chỉ xem một approval request pending được application đưa vào review scope; không duyệt hoặc ghi dữ liệu qua agent | Least privilege, kiểm thử cả allowed/denied |
+| D1 | Tool approval chỉ tạo pending | Agent không tự quyết định |
+| D2 | Một schema cho ID/action/summary, khóa không trùng ID/action | Registry, wrapper và test dùng chung |
+| D3 | Context do application cung cấp | Model không tự cấp quyền |
+| D4 | Sơ đồ tổng thể và ba workflow | Đáp ứng kiến trúc bàn giao |
+| D5 | Section là locator chính, page có thể null | Citation truy vết, không bịa trang |
+| D6 | Tách trạng thái chuyến, yêu cầu và draft | Tránh nhận nhầm đã duyệt/đã phát hành |
+| D7 | Luật điều kiện trong requirements.json | Kiểm tra nghiệp vụ xác định |
+| D8 | Xung đột active cần người xử lý | Không tự chọn phiên bản thuận tiện |
+| D9 | Bám bảy trọng số đề bài | Tổng 100% |
+| D10 | Approver đọc một scope pending theo action | Quyền tối thiểu, test cho phép và từ chối |
+| D11 | Lỗi scope chung, lỗi thao tác riêng theo role | Phản hồi gọn và đúng nguyên nhân |

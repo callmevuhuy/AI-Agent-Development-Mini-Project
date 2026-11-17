@@ -1,31 +1,35 @@
-# TODO — Global Business Travel Operations Agent
+# Công việc và trạng thái dự án
 
-**Trạng thái:** Các công việc cốt lõi và gói nâng cấp bàn giao (English NLU, 4-flow routing, Strict Staff Handoff, Short/Long-term Memory integration, UTF-8 CSV logger, Zero-dependency Web Demo, và vá các bug logic/budget nền) đã hoàn thành (2026-11-16). Không còn TODO bắt buộc trong phạm vi hiện tại.
+## Đã hoàn thành trong phạm vi nguyên mẫu
 
-## Đã hoàn thành
+- [x] Dữ liệu giả lập, 19 tool, JSON Schema, registry, allowlist và phân quyền tại dispatcher.
+- [x] Ba quy trình trước/trong/sau chuyến đi, bản nháp có ID ổn định, trạng thái dừng trung thực và trích dẫn policy.
+- [x] `request_approval` chỉ tạo pending, chỉ dành cho Employee sở hữu chuyến đi, không tạo trùng theo `(trip_id, action_type)`.
+- [x] Định tuyến bốn luồng, lookup theo ID/ngày/điểm đến, câu hỏi kết hợp nghiệp vụ và chính sách, kiểm tra ngày bay thực tế.
+- [x] Session có TTL; preferences có yêu cầu đồng ý; cách ly user/session.
+- [x] CSV UTF-8 BOM có che mẫu token/số thẻ; audit kỹ thuật không chứa nguyên văn tin nhắn.
+- [x] Web demo và CLI; Admin xem audit, tải CSV, reset runtime; API các tab lọc dữ liệu theo quyền.
+- [x] RAG áp dụng ACL trước xếp hạng, kiểm tra căn cứ, xung đột và loại chỉ thị injection.
+- [x] Rà lại happy case và ca không thành công của bốn Employee, Reviewer, Approver, Admin.
+- [x] Sửa danh sách chuyến của Employee, preferences của Approver, pending request qua chat và từ chối quyết định phê duyệt qua chat.
+- [x] Lỗi scope dùng thông báo chung; lỗi thao tác theo role có thông báo riêng; giữ mã kỹ thuật và không lộ hồ sơ ngoài quyền.
+- [x] Bỏ câu nhắc thừa về các hành động chưa thực hiện trong phản hồi.
+- [x] Chuyển Markdown sang tiếng Việt và sửa bộ sinh báo cáo để lần chạy sau vẫn tạo tài liệu tiếng Việt.
 
-- [x] `request_approval`: JSON Schema, registry/allowlist, dispatcher, persistence, chỉ tạo `pending`, idempotent theo `(trip_id, action_type)`, Employee và trip-owner scoped.
-- [x] Application entry point, English NLU router (`nlu.py`), 4-flow conversational orchestrator (`conversation.py`: `SELF_SERVE`, `CLARIFY`, `HANDOFF_STAFF`, `REJECT_SAFETY`), CLI (`message`, `chat`, `handoffs`, `logs`, `web`), và zero-dependency Web Demo (`demo/web_demo.py`).
-- [x] Memory integration: nối short-term session (`active_trip_id`, `active_report_id`, `pending_slot`, TTL) và long-term preference formatting (`preferred_output_format`) vào luồng chat.
-- [x] UTF-8 BOM CSV Logger (`logging_utils.py`): ghi `data/logs/chat_history.csv` và `data/logs/handoff_queue.csv` (có che token/số thẻ nhạy cảm), giữ `audit_events.json` sạch raw message.
-- [x] Test matrix: 53 automated pytest cases; bao gồm workflows, bug fixes (`meals` threshold, `rejected` blocking priority, draft source check), natural-language lookup without raw IDs, mixed NLU, synonym RAG, memory isolation + TTL, strict handoff, role-distinct capabilities, UTF-8 CSV logging, và Web Demo HTTP + Admin reset/export guards.
-- [x] Evaluation runner: 31 cases; `after` đạt 31/31, không có regression. Ghi metrics/case results tại `eval/reports/` và workflow traces tại `eval/traces/`.
-- [x] Root-cause notes, regression report, README setup/run/limitations và script demo ba workflows + Admin view.
-- [x] Admin mock role `U-ADM-001`: chỉ đọc toàn bộ trip overview và audit history; không có quyền RAG, draft, preference, approval request/decision hay business write.
-- [x] Audit events append-only qua tool boundary cho workflow outcomes, request creation và external mock approval decisions; có actor/role/action/IDs/outcome/reason/timestamp/run ID. Không có tool chỉnh sửa/xóa log.
-- [x] RAG ACL: `allowed_roles` được áp dụng trước ranking, version conflict và citation. Approver còn cần pending scope và category hợp lệ; Admin mặc định không được tìm policy.
-- [x] Đồng bộ PLAN, architecture, workflows, tool cards, data spec, safety matrix, handoff và changelog.
+## Xác minh
 
-## Đã xác nhận bằng kiểm tra
+Lần kiểm tra ngày 2026-11-17: **96/96 test pytest đạt**, bao gồm test HTTP thật; **31/31 ca evaluation đạt**, không có hồi quy trên tập ca đã lưu. `compileall` và kiểm tra diff không phát hiện lỗi.
 
-- `python -m pytest -v`: 53 passed.
-- `python eval/run_eval.py --label after`: 31/31 passed, không có regression trên tập case chung.
-- `python -m compileall -q src tests eval demo` và `git diff --check` thành công.
+Chạy các lệnh trong `README.md`; xem kết quả mới nhất ở `eval/reports/after.md` và `eval/reports/regression.md`. Số lượng test được xác định bởi pytest lúc chạy. Mốc 2026-11-16 có 53 test; mốc trước đợt rà soát này có 69 test. Các số lịch sử không thay thế kết quả kiểm tra hiện tại.
 
-Baseline là lần đo số liệu đầu tiên sau khi các tính năng đã được triển khai; không có benchmark lịch sử trước thay đổi. Evaluation là deterministic mock suite, không phải benchmark chất lượng LLM quy mô lớn.
+Evaluator có 31 ca xác định. Baseline là lần đo đầu tiên sau khi triển khai, không phải số đo trước khi dự án tồn tại; không suy diễn thành mức cải thiện lịch sử.
 
-## Ngoài phạm vi hiện tại (chỉ cần nếu project mở rộng)
+## Chỉ cần khi mở rộng dự án
 
-- Semantic entailment/NLI để bổ sung hoặc thay lexical grounding baseline.
-- LLM thật, identity provider, storage/audit production và chính sách retention vận hành.
-- Real API/booking/payment/email, deployment, background job hoặc dữ liệu nhân viên thật.
+- [ ] Thêm kiểm tra căn cứ ngữ nghĩa để hỗ trợ diễn đạt lại và quy định phức tạp.
+- [ ] Thay tài khoản demo bằng đăng nhập và phân công phê duyệt thật.
+- [ ] Dùng cơ sở dữ liệu, kiểm soát ghi đồng thời, mã hóa và chính sách lưu/xóa log phù hợp vận hành.
+- [ ] Bổ sung tổng budget cho toàn bộ tin nhắn, timeout cưỡng chế và đo hiệu quả trên nhiều dữ liệu hơn.
+- [ ] Tích hợp LLM hoặc dịch vụ bên ngoài chỉ khi có yêu cầu mở rộng phạm vi rõ ràng.
+
+Đặt vé, thanh toán, hoàn tiền, gửi email, chạy lịch nền và dùng dữ liệu cá nhân thật vẫn nằm ngoài phạm vi mini-project.

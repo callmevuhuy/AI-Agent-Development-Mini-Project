@@ -1,144 +1,141 @@
-# Global Business Travel Operations Agent
+# Trợ lý điều hành công tác doanh nghiệp
 
-Offline deterministic prototype for business travel operations across pre-trip preparation, in-trip disruption support, and post-trip expense pre-check. All travel, traveler, itinerary, approval, expense, and policy data are synthetic mock fixtures. No live bookings, payments, approvals, email deliveries, or external API calls are performed.
+Nguyên mẫu hỗ trợ chuẩn bị chuyến công tác, xử lý sự cố trong chuyến đi và rà soát chi phí sau chuyến đi. Hệ thống chạy ngoại tuyến với dữ liệu giả lập; định tuyến, phân quyền, tính toán và đánh giá được thực hiện bằng quy tắc xác định.
 
-## Requirements and Installation
+## Cài đặt môi trường
 
-Requires Python 3.11 or later.
+Yêu cầu Python 3.11 trở lên. Tại thư mục dự án, chạy PowerShell:
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip check
 ```
 
-## Execution
+`requirements.txt` cài `jsonschema`, `pytest` và chính dự án ở chế độ chỉnh sửa (`-e .`). Có thể dùng trực tiếp Python trong `.venv` mà không cần kích hoạt môi trường.
 
-### Local Web Interface
+## Chạy giao diện web
 
 ```powershell
-python -m travel_agent.app web --port 8080
+.\.venv\Scripts\python.exe -m travel_agent.app web --port 8080
 ```
 
-The server listens on `http://127.0.0.1:8080`. It provides an interactive chat view, role selector, trace/memory inspector, Staff Handoff Queue view, Admin CSV download endpoints, and an Admin-only runtime data reset action.
+Mở [web demo](http://127.0.0.1:8080). Giao diện có Chat, Trips, Drafts, Handoff, Audit log và Memory & Trace, đi kèm mô tả tiếng Việt. Tài khoản được chọn từ dữ liệu giả lập, chưa phải đăng nhập production.
 
-The demo uses Vietnamese descriptions with familiar English labels (Chat, Trips, Drafts, Handoff, Audit log, Memory & Trace). Error messages are always in Vietnamese, including when the request is in English. They explain the reason and next step while retaining stable diagnostic codes such as `unauthorized_scope`. Tool error details are preserved in chat responses, workflow results, and safe traces.
+Thông báo lỗi luôn dùng tiếng Việt và giữ mã kỹ thuật để tra cứu. Truy cập dữ liệu ngoài phạm vi dùng thông báo chung; thao tác không phù hợp với role nêu rõ role, thao tác bị hạn chế và người có thể hỗ trợ. Phản hồi chỉ trình bày kết quả, căn cứ và bước tiếp theo; không chèn câu nhắc thừa về các hành động agent chưa làm.
 
-Tab APIs require a selected mock `user_id`: Employees see only their trips and drafts; Reviewers can review all trips and drafts; Approvers use scoped read-only chat instead of browsing trips or drafts; audit logs and CSV exports require Admin. Handoff and chat history are limited to the current user, with Admin able to inspect all records. Switching the demo account clears the previous account's displayed data. This selector remains a local demo mechanism, not production authentication.
+API của các tab áp dụng quyền tại server: Employee chỉ xem chuyến và bản nháp của mình; Reviewer xem được các chuyến và bản nháp; Approver đọc hồ sơ trong phạm vi phê duyệt qua chat; Admin xem tổng quan, audit, tải CSV và reset dữ liệu chạy thử. Lịch sử chat và hàng đợi hỗ trợ giới hạn theo tài khoản, riêng Admin được xem toàn bộ. Đổi tài khoản sẽ xóa nội dung đang hiển thị và bỏ qua phản hồi cũ đến muộn.
 
-### Command-Line Interface
+## Chạy bằng dòng lệnh
 
 ```powershell
-# Interactive multi-turn chat
-python -m travel_agent.app chat --user U-EMP-002 --session demo-1
+# Hội thoại nhiều lượt
+.\.venv\Scripts\python.exe -m travel_agent.app chat --user U-EMP-002 --session demo-1
 
-# Single conversational request
-python -m travel_agent.app message --user U-EMP-002 --text "My flight to Tokyo on Dec 8 is delayed, what should I do?"
+# Một câu hỏi có mã chuyến đi
+.\.venv\Scripts\python.exe -m travel_agent.app message --user U-EMP-002 --text "Chuyến bay TRIP-2026-002 bị trễ, tôi nên làm gì?"
 
-# Direct workflow execution
-python -m travel_agent.app run pretrip --user U-EMP-002 --id TRIP-2026-006
-python -m travel_agent.app run intrip --user U-EMP-002 --id TRIP-2026-002
-python -m travel_agent.app run posttrip --user U-EMP-002 --id EXP-2026-001
+# Ba quy trình nghiệp vụ
+.\.venv\Scripts\python.exe -m travel_agent.app run pretrip --user U-EMP-002 --id TRIP-2026-006
+.\.venv\Scripts\python.exe -m travel_agent.app run intrip --user U-EMP-002 --id TRIP-2026-002
+.\.venv\Scripts\python.exe -m travel_agent.app run posttrip --user U-EMP-002 --id EXP-2026-001
 
-# Pending-only approval request (Employee trip owner only)
-python -m travel_agent.app request-approval --user U-EMP-001 --trip TRIP-2026-001 --action escalation --summary "Please review the disruption details."
+# Tạo yêu cầu phê duyệt đang chờ, chỉ cho chủ chuyến đi
+.\.venv\Scripts\python.exe -m travel_agent.app request-approval --user U-EMP-001 --trip TRIP-2026-001 --action checklist_review --summary "Đề nghị xem xét checklist."
 
-# Admin read-only views and CSV log inspection
-python -m travel_agent.app admin-trips --user U-ADM-001
-python -m travel_agent.app admin-audit --user U-ADM-001 --trip TRIP-2026-004
-python -m travel_agent.app handoffs --status open
-python -m travel_agent.app logs --limit 20
+# Chức năng chỉ đọc dành cho Admin
+.\.venv\Scripts\python.exe -m travel_agent.app admin-trips --user U-ADM-001
+.\.venv\Scripts\python.exe -m travel_agent.app admin-audit --user U-ADM-001 --trip TRIP-2026-004
+.\.venv\Scripts\python.exe -m travel_agent.app handoffs --status open
+.\.venv\Scripts\python.exe -m travel_agent.app logs --limit 20
 ```
 
-## Environment Configuration
+## Cấu hình môi trường
 
-| Variable | Default | Purpose |
+| Biến | Mặc định | Công dụng |
 |---|---|---|
-| `TRAVEL_AGENT_DATA_DIR` | `data/` | Mock JSON fixtures directory |
-| `TRAVEL_AGENT_DRAFT_DIR` | `data/drafts/` | Sandbox draft output directory |
-| `TRAVEL_AGENT_MEMORY_DIR` | `data/memory/` | Session and preference JSON directory |
-| `TRAVEL_AGENT_LOG_DIR` | `data/logs/` | UTF-8 BOM CSV log directory |
-| `TRAVEL_AGENT_DEMO_TODAY` | System date | ISO date (`YYYY-MM-DD`) used to resolve `today` and `tomorrow` against mock schedules (`2026-12-01` to `2027-01-07`) |
+| `TRAVEL_AGENT_DATA_DIR` | `data/` | Thư mục dữ liệu JSON giả lập |
+| `TRAVEL_AGENT_DRAFT_DIR` | `data/drafts/` | Nơi lưu bản nháp |
+| `TRAVEL_AGENT_MEMORY_DIR` | `data/memory/` | Nơi lưu ngữ cảnh phiên và tùy chọn |
+| `TRAVEL_AGENT_LOG_DIR` | `data/logs/` | Nơi lưu CSV UTF-8 BOM |
+| `TRAVEL_AGENT_DEMO_TODAY` | Ngày hệ thống | Ngày tham chiếu ISO cho câu hỏi hôm nay/ngày mai |
 
-## Routing Model
+Lịch giả lập nằm trong khoảng `2026-12-01` đến `2027-01-07`. Dùng ID hoặc ngày đầy đủ để kết quả không phụ thuộc ngày chạy.
 
-Requests are classified in `src/travel_agent/nlu.py` and executed in `src/travel_agent/conversation.py` across four routes:
+## Định tuyến hội thoại
 
-1. `SELF_SERVE`: Executes authorized workflows (`pretrip`, `intrip`, `posttrip`), standalone policy Q&A with citations, mixed workflow + policy queries, explicit preference commands, or Admin read-only queries.
-2. `CLARIFY` (`needs_input`): Requests clarification when a natural date or destination matches zero or multiple records, or when required trip/expense fields or receipts are missing.
-3. `HANDOFF_STAFF` (`needs_human` / `awaiting_approval`): Escalates using a fixed template (`[HANDOFF TO STAFF | Ticket: HND-...]`) containing only verified tool facts and citations when evidence is missing or conflicting, approval is pending or rejected, a flight is cancelled, or an out-of-authority action is requested.
-4. `REJECT_SAFETY` (`failed_validation` / `unauthorized_scope`): Rejects malformed IDs, prompt-injection or rule-bypass patterns, and unauthorized role or record access prior to side effects.
+| Tuyến | Khi sử dụng |
+|---|---|
+| `SELF_SERVE` | Lời chào, danh sách chuyến theo quyền, quy trình nghiệp vụ, tra cứu chính sách, quản lý tùy chọn, tạo yêu cầu pending tường minh và chức năng quản trị chỉ đọc |
+| `CLARIFY` | Thiếu ID, nhiều chuyến phù hợp, ngày không khớp hoặc thiếu thông tin/chứng từ |
+| `HANDOFF_STAFF` | Thiếu căn cứ, xung đột chính sách, sự cố cần người xử lý, chuyến bị hủy hoặc yêu cầu ngoài khả năng tự động |
+| `REJECT_SAFETY` | ID sai, chỉ thị vượt quy tắc, thao tác bị cấm theo role hoặc dữ liệu ngoài scope |
 
-## Roles and Permissions
+`request_approval` tạo pending khi Employee yêu cầu rõ ràng, ví dụ `Yêu cầu phê duyệt checklist TRIP-2026-006`. Yêu cầu quyết định phê duyệt qua chat bị từ chối riêng, không bị nhầm thành thao tác tạo pending.
 
-User identities and roles are resolved from `data/users.json` (`--user` is a local demo selector, not production authentication). Role-specific scenarios are documented in [`demo/DEMO_SCENARIOS.md`](demo/DEMO_SCENARIOS.md).
+## Vai trò và quyền
 
-| User ID | Role | Permitted Operations | Restrictions |
+| Tài khoản | Role | Quyền chính | Giới hạn |
 |---|---|---|---|
-| `U-EMP-001`, `U-EMP-002` | Employee | Read/process own trips, itineraries, expenses, checklists, own preferences, and pending `request_approval` for own trips | Denied access to other employees' records and Admin views |
-| `U-REV-001` | Reviewer | Read and review all employees' trips, itineraries, expenses, drafts, and allowed policy chunks | Cannot call `request_approval` or Admin audit tools |
-| `U-APR-001` | Approver | Read-only access limited to one application-supplied pending `approval_scope` and action-specific policy categories | Cannot browse out-of-scope records, write drafts, or decide approvals via agent tools |
-| `U-ADM-001` | Admin | Read-only trip overview, audit history, Staff Handoff Queue view, CSV log downloads, and runtime demo reset (`POST /api/admin/reset`) | Cannot run Employee workflows, search policy RAG, write drafts, or access memory tools |
+| `U-EMP-001` đến `U-EMP-004` | Employee | Xem và xử lý chuyến, hành trình, chi phí, tùy chọn của mình; tạo pending cho chuyến của mình | Không đọc dữ liệu người khác hoặc audit |
+| `U-REV-001` | Reviewer | Rà soát mọi chuyến, chi phí, bản nháp và chính sách được cấp | Không tạo yêu cầu thay Employee hoặc quyết định phê duyệt |
+| `U-APR-001` | Approver | Đọc hồ sơ và danh mục chính sách thuộc một `approval_scope` đang pending; quản lý tùy chọn cá nhân | Không duyệt danh sách rộng, rà soát chi phí, tạo draft hoặc ra quyết định qua agent |
+| `U-ADM-001` | Admin | Xem tổng quan, audit, hàng đợi hỗ trợ, tải CSV và reset runtime | Không chạy quy trình nghiệp vụ, tra policy hoặc dùng memory cá nhân |
 
-## Project Structure
+## Memory và dispatcher
 
-```text
-data/                     Mock JSON fixtures (trips, travelers, itineraries, approvals, expenses, policy_chunks, users)
-  drafts/                 Idempotent sandbox draft JSON artifacts
-  logs/                   UTF-8 BOM CSV files (chat_history.csv, handoff_queue.csv)
-  memory/                 User-scoped preference and TTL session JSON files
-demo/
-  DEMO_SCENARIOS.md       Role-based scenario scripts
-  run_demo.ps1            PowerShell demo sequence
-  web_demo.py             Web UI entrypoint
-src/travel_agent/
-  app.py                  CLI and application boundary
-  config.py               Centralized paths, budgets, and reference date
-  nlu.py                  English normalizer, ID/date/destination extraction, clause splitter, 4-route classifier
-  conversation.py         4-flow orchestrator, scoped lookup resolution, response formatting, handoff guard
-  dispatcher.py           Allowlist, JSON Schema, role/scope authorization, and budget enforcement
-  registry.py             19 registered tools and per-workflow allowlists
-  logging_utils.py        Thread-safe UTF-8 BOM CSV logger with token/number redaction
-  web_demo.py             Stdlib HTTP server and browser UI
-  memory/                 Short-term session store (with TTL) and long-term preference store
-  rag/                    Offline BM25, stemming, synonym expansion, version review, and lexical grounding
-  workflows/              Pre-trip (A), In-trip (B), and Post-trip (C) modules
-tests/                    Automated pytest suite
-eval/                     Deterministic evaluation runner (31 cases) and reports
-```
+Session memory giữ `active_trip_id`, `active_report_id`, `last_workflow`, `pending_slot` theo người dùng và phiên; TTL mặc định 30 phút, gia hạn khi ghi. Preferences chỉ gồm ngôn ngữ và định dạng phản hồi, chỉ ghi/xóa khi người dùng yêu cầu. Dữ kiện nghiệp vụ luôn lấy lại từ công cụ.
 
-## Logging, Memory, and Verification
+Dispatcher kiểm tra registry, allowlist theo workflow, JSON Schema, quyền theo role/scope, ngân sách và cấu trúc kết quả. Orchestrator điều phối retry và ghi trace. Mặc định có 8 bước cho một `RunState`, trần cấu hình 12; chat pre-trip/mixed dùng 10. Lookup phụ có state riêng nên đây không phải trần tổng cho toàn bộ tin nhắn. Chỉ retry lỗi `retryable=true`, tối đa hai lần sau lần gọi đầu.
 
-* Conversation turns are appended to `data/logs/chat_history.csv` and staff escalations to `data/logs/handoff_queue.csv` in UTF-8 BOM format with card/token redaction. Technical `data/audit_events.json` excludes raw user messages.
-* Both `pytest` and `eval/run_eval.py` execute against temporary copies of `data/` and do not modify repository fixtures.
+## Cấu trúc dự án
+
+| Đường dẫn | Nội dung |
+|---|---|
+| `data/` | Dữ liệu giả lập và các thư mục runtime: bản nháp, memory, CSV |
+| `src/travel_agent/app.py` | Điểm vào ứng dụng và CLI |
+| `src/travel_agent/nlu.py` | Nhận diện ID, ngày, điểm đến, ý định theo mẫu Anh–Việt |
+| `src/travel_agent/conversation.py` | Điều phối hội thoại và định dạng phản hồi |
+| `src/travel_agent/dispatcher.py` | Kiểm tra tool call và phân quyền |
+| `src/travel_agent/registry.py` | 19 công cụ và allowlist |
+| `src/travel_agent/errors.py` | Thông báo lỗi chung và lỗi thao tác theo role |
+| `src/travel_agent/memory/` | Lưu ngữ cảnh phiên và tùy chọn |
+| `src/travel_agent/rag/` | BM25 ngoại tuyến, citation, kiểm tra căn cứ và phiên bản |
+| `src/travel_agent/workflows/` | Ba quy trình trước, trong và sau chuyến đi |
+| `src/travel_agent/web_demo.py` | HTTP server và giao diện web |
+| `tests/`, `eval/` | Test tự động, đánh giá và báo cáo |
+
+## Kiểm thử và ghi log
 
 ```powershell
-python -m pytest -v
-python eval/run_eval.py --label after
-python -m compileall -q src tests eval demo
+.\.venv\Scripts\python.exe -m pytest -v --basetemp .venv/pytest-tmp
+.\.venv\Scripts\python.exe -m pytest tests -v -k "scope or permission or role or preference or ttl" --basetemp .venv/pytest-tmp
+.\.venv\Scripts\python.exe eval/run_eval.py --label after
+.\.venv\Scripts\python.exe -m compileall -q src tests eval demo
 ```
 
-## Deliverables Index (Section 14 Compliance)
+Pytest và evaluator dùng bản sao dữ liệu tạm. Evaluator ghi kết quả vào `eval/reports/` và trace vào `eval/traces/`. Hội thoại demo ghi CSV có che mẫu token/số thẻ; audit kỹ thuật không ghi nguyên văn tin nhắn. Đây chưa phải cơ chế lọc mọi loại dữ liệu nhạy cảm.
 
-Full mapping with concrete evidence against the assignment specification is documented in [REQUIREMENTS_COMPLIANCE_EVIDENCE.md](REQUIREMENTS_COMPLIANCE_EVIDENCE.md).
+Xem [kịch bản demo](demo/DEMO_SCENARIOS.md), [ma trận kiểm thử](Given%20Docs/TEST_MATRIX.md) và [đối chiếu yêu cầu](REQUIREMENTS_COMPLIANCE_EVIDENCE.md).
 
-| Deliverable | Specification Reference | Repository Location |
-|---|---|---|
-| **1. Source Code & CLI** | Section 14.1 | [src/travel_agent/](src/travel_agent/) |
-| **2. Setup & Execution Guide** | Section 14.2 | [README.md](README.md) |
-| **3. Mock Datasets & Policy Corpus** | Section 14.3 | [data/](data/) (`trips`, `travelers`, `itineraries`, `expenses`, `policy_chunks`) |
-| **4. Agent Contract & Tool Cards** | Section 14.4 | [Given Docs/AGENTS.md](Given%20Docs/AGENTS.md), [Given Docs/TOOL_CARDS.md](Given%20Docs/TOOL_CARDS.md), [src/travel_agent/schemas/](src/travel_agent/schemas/) |
-| **5. Architecture & Vertical Workflows** | Section 14.5 | [Given Docs/ARCHITECTURE.md](Given%20Docs/ARCHITECTURE.md) |
-| **6. Memory Policy & Data Boundaries** | Section 14.6 | [Given Docs/MEMORY_AND_SAFETY.md](Given%20Docs/MEMORY_AND_SAFETY.md) |
-| **7. Test Matrix & Root-Cause Taxonomy** | Section 14.7 | [Given Docs/TEST_MATRIX.md](Given%20Docs/TEST_MATRIX.md), [eval/reports/root_cause.md](eval/reports/root_cause.md) |
-| **8. Baseline / After / Regression Report** | Section 14.8 | [eval/reports/baseline.md](eval/reports/baseline.md), [eval/reports/after.md](eval/reports/after.md), [eval/reports/regression.md](eval/reports/regression.md) |
-| **9. Demo & Walkthrough** | Section 14.9 | [demo/DEMO_SCENARIOS.md](demo/DEMO_SCENARIOS.md), [demo/run_demo.ps1](demo/run_demo.ps1), [demo/web_demo.py](demo/web_demo.py) |
-| **10. Limitations & Safety Boundaries** | Section 14.10 | [README.md](README.md#known-limitations) & [Given Docs/AGENTS.md](Given%20Docs/AGENTS.md) |
-| **Bonus: Section 17 Self-Check Answers** | Section 17 | [REQUIREMENTS_COMPLIANCE_EVIDENCE.md#mục-17-giải-đáp-chi-tiết-6-câu-hỏi-tự-kiểm-tra-trước-khi-nộp-bài](REQUIREMENTS_COMPLIANCE_EVIDENCE.md#mục-17-giải-đáp-chi-tiết-6-câu-hỏi-tự-kiểm-tra-trước-khi-nộp-bài) |
+## Danh mục bàn giao theo mục 14 của đề bài
 
-## Known Limitations
+| Mục | Dẫn chứng |
+|---|---|
+| 14.1 Mã nguồn | `src/travel_agent/` |
+| 14.2 Cài đặt và chạy | Tài liệu này |
+| 14.3 Dữ liệu và kho chính sách | `data/` |
+| 14.4 Hợp đồng agent, tool và schema | `Given Docs/AGENTS.md`, `Given Docs/TOOL_CARDS.md`, `schemas/` |
+| 14.5 Kiến trúc và ba quy trình | `Given Docs/ARCHITECTURE.md` |
+| 14.6 Memory và ranh giới dữ liệu | `Given Docs/MEMORY_AND_SAFETY.md` |
+| 14.7 Test và phân tích lỗi | `Given Docs/TEST_MATRIX.md`, `eval/reports/root_cause.md` |
+| 14.8 Đánh giá trước/sau và hồi quy | `eval/reports/` |
+| 14.9 Demo | `demo/` |
+| 14.10 Giới hạn | Phần dưới và `Given Docs/AGENTS.md` |
 
-* Intent routing (`nlu.py`) and BM25 retrieval (`rag/retriever.py`) are deterministic, offline, and English-only; no external LLM or semantic NLI model is used.
-* Grounding (`rag/claim_evidence_check.py`) uses conservative lexical sentence and polarity matching.
-* Local JSON and CSV files model a single training tenant and are not a production database, identity provider, or immutable audit store.
-* No external travel booking, payment, email, or background scheduling integrations exist.
+## Giới hạn hiện tại
+
+- NLU nhận diện bằng mẫu và từ khóa; chưa hiểu mọi cách diễn đạt tiếng Anh hoặc tiếng Việt. BM25 chủ yếu dựa trên ngôn ngữ của kho chính sách.
+- Kiểm tra căn cứ dùng từ khóa, câu và phủ định; chưa có mô hình suy luận ngữ nghĩa hoặc LLM bên ngoài.
+- JSON/CSV cục bộ chưa có cơ sở dữ liệu, đăng nhập, mã hóa hay audit bất biến cấp production. Memory chưa có cơ chế giải quyết ghi đồng thời ở nhiều tiến trình.
+- Agent chỉ tạo bản nháp và yêu cầu pending. Đặt vé, thanh toán, hoàn tiền, quyết định phê duyệt, gửi email, lập lịch nền và tích hợp bên ngoài nằm ngoài phạm vi.
