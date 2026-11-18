@@ -8,25 +8,42 @@ Phản hồi workflow/handoff không tự đính kèm toàn bộ chi tiết Trip
 
 Nguyên mẫu hỗ trợ chuẩn bị chuyến công tác, xử lý sự cố trong chuyến đi và rà soát chi phí sau chuyến đi. Hệ thống chạy ngoại tuyến với dữ liệu giả lập; định tuyến, phân quyền, tính toán và đánh giá được thực hiện bằng quy tắc xác định.
 
-## Cài đặt môi trường
+## Chạy web demo trên Windows (all in one)
 
-Yêu cầu Python 3.11 trở lên. Tại thư mục dự án, chạy PowerShell:
+Cài **Python 3.11 trở lên** (chọn **Add Python to PATH** khi cài). Sau đó nhấp đúp [run_demo.bat](run_demo.bat) tại thư mục gốc dự án. Không cần tự tạo hoặc kích hoạt môi trường Python trước.
+
+File BAT tự tạo `.venv` nếu thiếu, cài dependencies nếu chưa có, chạy web server và mở trình duyệt khi server sẵn sàng. Lần cài dependencies đầu tiên cần Internet; demo dùng dữ liệu giả lập cục bộ.
+
+Có thể chạy từ PowerShell tại thư mục dự án:
+
+```powershell
+.\run_demo.bat
+```
+
+Địa chỉ mặc định: [http://127.0.0.1:8080](http://127.0.0.1:8080). Giữ cửa sổ terminal đang chạy; nhấn **Ctrl+C** để dừng server.
+
+Nếu cổng 8080 đang được dùng, mở địa chỉ trên nếu đó là demo đang chạy, hoặc chọn cổng khác:
+
+```powershell
+.\run_demo.bat 8081
+```
+
+Khi đó truy cập [http://127.0.0.1:8081](http://127.0.0.1:8081). Nếu trình duyệt không tự mở, truy cập địa chỉ được in trong terminal. Nếu khởi động thất bại, cửa sổ giữ lại thông báo lỗi để kiểm tra.
+
+Giao diện có Chat, Trips, Drafts, Handoff, Audit log và Memory & Trace. Tài khoản được chọn từ dữ liệu giả lập, chưa phải đăng nhập production.
+
+### Cài thủ công hoặc sửa dependencies
+
+Chỉ cần dùng các lệnh này khi muốn chạy CLI, kiểm thử hoặc cài lại dependencies:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m pip check
-```
-
-`requirements.txt` cài `jsonschema`, `pytest` và chính dự án ở chế độ chỉnh sửa (`-e .`). Có thể dùng trực tiếp Python trong `.venv` mà không cần kích hoạt môi trường.
-
-## Chạy giao diện web
-
-```powershell
 .\.venv\Scripts\python.exe -m travel_agent.app web --port 8080
 ```
 
-Mở [web demo](http://127.0.0.1:8080). Giao diện có Chat, Trips, Drafts, Handoff, Audit log và Memory & Trace, đi kèm mô tả tiếng Việt. Tài khoản được chọn từ dữ liệu giả lập, chưa phải đăng nhập production.
+`requirements.txt` cài `jsonschema`, `pytest` và chính dự án ở chế độ chỉnh sửa (`-e .`).
 
 Thông báo lỗi luôn dùng tiếng Việt và giữ mã kỹ thuật để tra cứu. Truy cập dữ liệu ngoài phạm vi dùng thông báo chung; thao tác không phù hợp với role nêu rõ role, thao tác bị hạn chế và người có thể hỗ trợ. Phản hồi chỉ trình bày kết quả, căn cứ và bước tiếp theo; không chèn câu nhắc thừa về các hành động agent chưa làm.
 
@@ -165,3 +182,4 @@ Chọn scope tường minh trước khi xem; nút trên dòng khác chuyến ho�
 Yêu cầu pending mới được application mô phỏng phân công mặc định cho U-APR-001; model không được truyền người phê duyệt qua arguments. Helper quyết định bên ngoài tool set cũng phải kiểm tra phân công. Chưa có quyết định approve/reject qua chat.
 
 Lỗi quyền dùng câu “Bạn không có quyền truy cập dữ liệu hoặc thực hiện thao tác này”, giữ code unauthorized_scope. Không dùng câu này cho giới hạn chức năng (ví dụ đặt phòng) hoặc lỗi đầu vào. Thiếu scope được nhắc chọn request được phân công, không tự tạo phiếu hỗ trợ.
+
