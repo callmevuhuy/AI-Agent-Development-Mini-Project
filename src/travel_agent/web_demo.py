@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from travel_agent.config import SUPPORTED_LLM_BACKENDS, get_gemini_api_key, get_gemini_model, get_llm_backend
 from travel_agent.conversation import handle_turn
 from travel_agent.workspace import draft_detail
 from travel_agent.trip_actions import available_actions, LABELS as TRIP_ACTION_LABELS, action_decision
@@ -970,9 +971,17 @@ _HTML = """<!doctype html>
       <input id="session" value="web-U-EMP-002" />
     </div>
 
+    <div>
+      <div class="user-box-label">Backend xử lý (LLM)</div>
+      <select id="llm-backend">
+        <option value="rule">RuleBased (Offline)</option>
+        <option value="gemini">Gemini API (Hybrid Agent)</option>
+      </select>
+    </div>
+
     <div class="status-pill">
       <span class="status-dot"></span>
-      <span>Demo offline · Dữ liệu giả lập</span>
+      <span id="backend-status-text">Demo offline · Dữ liệu giả lập</span>
     </div>
   </div>
 </aside>
@@ -1689,6 +1698,10 @@ function appendBotMsg(data) {
   const outcome = data.outcome || 'completed';
   const citationsCount = (data.citations || []).length;
   const stepCount = data.step_count ?? 0;
+  const llmInfo = data.llm || {};
+  const llmLabel = llmInfo.backend === 'gemini'
+    ? (llmInfo.fallback_used ? 'Gemini → Rule fallback' : `Gemini (${Math.round(llmInfo.latency_ms || 0)}ms)`)
+    : 'RuleBased';
   const hasError = Boolean(data.error) || route === 'REJECT_SAFETY';
 
   let stepBanner = `
@@ -1717,7 +1730,7 @@ function appendBotMsg(data) {
       ${stepBanner}
       <div class="msg-text">${formattedContent}</div>
       <div class="msg-meta-footer">
-        <span>Travel Ops Agent · v1.0</span>
+        <span>Travel Ops Agent · ${esc(llmLabel)}</span>
         <span>•</span>
         <span>${esc(uiLabel(route))}</span>
         <span>•</span>
@@ -1772,7 +1785,9 @@ async function sendTurn(tripRequest = null) {
 
   const user_id = document.getElementById('user').value;
   const session_id = document.getElementById('session').value.trim() || ('web-' + user_id);
+  const backendEl = document.getElementById('llm-backend');
   const payload = {message, user_id, session_id};
+  if (backendEl && backendEl.value) payload.llm_backend = backendEl.value;
   const generation = userGeneration;
 
   if (currentRole() === 'Approver') {
@@ -1817,6 +1832,8 @@ async function sendTurn(tripRequest = null) {
       outcome: data.outcome,
       handoff_id: data.handoff_id,
       citations: data.citations,
+      llm: data.llm,
+      total_step_budget: data.total_step_budget,
       trace: data.trace
     }, null, 2);
 
@@ -2120,6 +2137,12 @@ async function refreshInspector() {
     const adminNotice = 'Admin không có quyền truy cập bộ nhớ cá nhân. Hãy chọn Employee, Reviewer hoặc Approver để xem bộ nhớ của tài khoản đó.';
     document.getElementById('mem-session-box').textContent = currentRole() === 'Admin' ? adminNotice : JSON.stringify(data.session || {}, null, 2);
     document.getElementById('mem-pref-box').textContent = currentRole() === 'Admin' ? adminNotice : JSON.stringify(data.preferences || {}, null, 2);
+    const statusText = document.getElementById('backend-status-text');
+    if (statusText && data.llm) {
+      statusText.textContent = data.llm.gemini_configured
+        ? `Hybrid sẵn sàng · ${data.llm.model}`
+        : 'Demo offline · Chưa cấu hình GEMINI_API_KEY';
+    }
   }, message => {
     document.getElementById('mem-session-box').textContent = message;
     document.getElementById('mem-pref-box').textContent = message;
@@ -2228,6 +2251,11 @@ def build_state_payload(user_id: str, session_id: str) -> dict[str, Any]:
         "preferences": preferences,
         "handoffs": [row for row in read_handoff_queue() if user["role"] == "Admin" or row.get("user_id") == user_id],
         "chat_history": [row for row in read_chat_history() if user["role"] == "Admin" or row.get("user_id") == user_id][-50:],
+        "llm": {
+            "default_backend": get_llm_backend(),
+            "gemini_configured": bool(get_gemini_api_key()),
+            "model": get_gemini_model(),
+        },
     }
 
 
@@ -2426,6 +2454,10 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                             or scope.get('action_type') != payload['request_action_type']):
                         self._send_error(HTTPStatus.FORBIDDEN, 'unauthorized_scope', 'Yêu cầu này không khớp phạm vi phê duyệt đang chọn. Hãy chọn đúng chuyến và loại yêu cầu.')
                         return
+                llm_backend = payload.get("llm_backend")
+                if llm_backend is not None and (not isinstance(llm_backend, str) or llm_backend.strip().lower() not in SUPPORTED_LLM_BACKENDS):
+                    self._send_error(HTTPStatus.BAD_REQUEST, "invalid_argument", "Backend xử lý không hợp lệ. Chỉ hỗ trợ 'rule' hoặc 'gemini'.")
+                    return
                 result = handle_turn(
                     payload.get("message", ""),
                     payload.get("user_id", ""),
@@ -2433,6 +2465,7 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                     approval_scope=payload.get("approval_scope"),
                     trip_action=payload.get('action') if parsed.path == '/api/trip/action' else None,
                     action_trip_id=payload.get('trip_id') if parsed.path == '/api/trip/action' else None,
+                    llm_backend=llm_backend,
                 )
             except ValueError as exc:
                 self._send_error(HTTPStatus.BAD_REQUEST, "invalid_argument", "Không thể xử lý yêu cầu. Hãy kiểm tra tài khoản, mã phiên và phạm vi phê duyệt.")

@@ -112,9 +112,20 @@ def chat_turn(
     *,
     session_id: str = "demo-session",
     approval_scope: dict[str, str] | None = None,
+    llm_backend: str | None = None,
+    llm_client: Any | None = None,
+    use_tool_loop: bool = True,
 ) -> dict[str, Any]:
     """Run one 4-flow conversational turn with short/long-term memory and UTF-8 CSV logging."""
-    return handle_turn(message, user_id, session_id=session_id, approval_scope=approval_scope)
+    return handle_turn(
+        message,
+        user_id,
+        session_id=session_id,
+        approval_scope=approval_scope,
+        llm_backend=llm_backend,
+        llm_client=llm_client,
+        use_tool_loop=use_tool_loop,
+    )
 
 
 def cli() -> None:

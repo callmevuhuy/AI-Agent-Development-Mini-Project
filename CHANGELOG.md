@@ -1,5 +1,11 @@
 # Nhật ký thay đổi
 
+## 2026-11-19 — Tích hợp Hybrid Gemini API (Phase 1–5) & Pre-Phase 1
+
+- **Pre-Phase 1:** Làm sạch `data/audit_events.json` về 2 bản ghi seed (`EVT-SEED-001`, `EVT-SEED-002`); bổ sung che key Google API (`AIza...`) và token vào `logging_utils.py`; sửa tên `demo/DEMO_WEB.md` và liên kết hỏng trong `README.md`.
+- **Phase 1–3 (`src/travel_agent/llm.py`, `config.py`, `conversation.py`):** Thêm `google-genai>=1.0.0`, cấu hình `TRAVEL_AGENT_LLM_BACKEND` (`rule` mặc định | `gemini`), `TurnBudget` cho toàn tin nhắn (`TOTAL_TURN_MAX_STEPS = 32`); Structured Output NLU với round-1 safety guard trước khi gọi API; 1-hop RAG query rewrite; tổng hợp câu trả lời có Post-Generation Guard (`check_generated_response`); và Gemini Function Calling / tool-use loop qua `dispatcher.py` có fallback tự động khi lỗi/timeout/`429`.
+- **Phase 4–5 (`tests/test_llm_gemini.py`, `eval/run_eval_llm.py`, `web_demo.py`):** Bổ sung bộ test mock Gemini cho đủ 5 phase, script `eval/run_eval_llm.py` cho tập câu độc lập, và selector chọn backend (`RuleBased` vs `Gemini`) cùng metadata `llm` / `total_step_budget` trong `Memory & Trace` của Web Demo.
+
 ## 2026-11-18 — Phản hồi gọn, nhiều yêu cầu và tham chiếu Trip
 
 - Bỏ chèn chi tiết hồ sơ Trip theo preference detailed vào workflow/handoff/clarification; giữ thông tin phục vụ đúng câu hỏi và đọc đầy đủ khi được yêu cầu tường minh.

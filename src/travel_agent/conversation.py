@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from travel_agent.errors import ERROR_MESSAGES, error_text, role_error
+from travel_agent.llm import LLMCallMeta, TurnBudget, get_backend
 from travel_agent.logging_utils import log_chat_turn
 from travel_agent.memory import (
     delete_session_value,
@@ -18,8 +19,8 @@ from travel_agent.mock_systems.approval import record_audit_event
 from travel_agent.mock_systems.user import get_user
 from travel_agent.nlu import RouteDecision, normalize_text, route_message_intent
 from travel_agent.orchestrator import run_tool
-from travel_agent.rag.query_rewrite import rewrite_query
 from travel_agent.state import RunState
+from travel_agent.tools._result import failure
 from travel_agent.workflows.a_pretrip import run_pretrip
 from travel_agent.workflows.b_intrip import run_intrip
 from travel_agent.workflows.c_posttrip import run_posttrip
@@ -117,11 +118,55 @@ def _traveler_label(traveler: dict[str, Any] | None, fallback_id: str | None = N
     return fallback_id
 
 
-def _lookup_traveler(user: dict[str, Any], user_context: dict[str, Any], traveler_id: str | None) -> dict[str, Any] | None:
+def _run_aux_tool(
+    budget: TurnBudget | None,
+    workflow: str,
+    user_context: dict[str, Any],
+    phase: str,
+    tool_name: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    """Run an auxiliary lookup tool while respecting the shared message-level step budget."""
+    if budget is not None and budget.remaining() <= 0:
+        return failure("budget_exceeded", ERROR_MESSAGES["budget_exceeded"])
+    max_steps = budget.allocate() if budget is not None else 8
+    aux_state = RunState(workflow, user_context, phase=phase, max_steps=max_steps)
+    res = run_tool(aux_state, tool_name, arguments)
+    if budget is not None:
+        budget.consume(aux_state.step_count)
+    return res
+
+
+def _merge_llm_meta(base: LLMCallMeta, extra: LLMCallMeta) -> LLMCallMeta:
+    if extra.backend == "gemini":
+        base.backend = "gemini"
+    if extra.model and not base.model:
+        base.model = extra.model
+    base.latency_ms += extra.latency_ms
+    base.input_tokens += extra.input_tokens
+    base.output_tokens += extra.output_tokens
+    base.fallback_used = base.fallback_used or extra.fallback_used
+    if extra.fallback_reason and not base.fallback_reason:
+        base.fallback_reason = extra.fallback_reason
+    base.query_rewritten = base.query_rewritten or extra.query_rewritten
+    base.tool_loop_steps += extra.tool_loop_steps
+    return base
+
+
+def _lookup_traveler(
+    user: dict[str, Any],
+    user_context: dict[str, Any],
+    traveler_id: str | None,
+    *,
+    budget: TurnBudget | None = None,
+) -> dict[str, Any] | None:
     if not traveler_id or user.get("role") not in {"Employee", "Reviewer"}:
         return None
-    res = run_tool(
-        RunState("pretrip", user_context, phase="traveler_lookup"),
+    res = _run_aux_tool(
+        budget,
+        "pretrip",
+        user_context,
+        "traveler_lookup",
         "get_traveler_profile",
         {"traveler_id": traveler_id},
     )
@@ -133,6 +178,8 @@ def _enrich_trip_and_traveler(
     user: dict[str, Any],
     user_context: dict[str, Any],
     resolved_trip: str | None,
+    *,
+    budget: TurnBudget | None = None,
 ) -> dict[str, Any]:
     if not isinstance(result, dict) or result.get("error_code") == "unauthorized_scope" or result.get("outcome") == "failed_validation":
         return result
@@ -142,8 +189,11 @@ def _enrich_trip_and_traveler(
     trip = result.get("trip")
     trip_id = resolved_trip or (result.get("report") or {}).get("trip_id") or (result.get("support_draft") or {}).get("trip_id")
     if not isinstance(trip, dict) and trip_id:
-        trip_res = run_tool(
-            RunState("pretrip", user_context, phase="trip_context_lookup"),
+        trip_res = _run_aux_tool(
+            budget,
+            "pretrip",
+            user_context,
+            "trip_context_lookup",
             "get_trip_request",
             {"trip_id": trip_id},
         )
@@ -155,7 +205,7 @@ def _enrich_trip_and_traveler(
         (trip.get("traveler_id") if isinstance(trip, dict) else None)
         or ((result.get("report") or {}).get("traveler_id"))
     )
-    traveler = _lookup_traveler(user, user_context, traveler_id)
+    traveler = _lookup_traveler(user, user_context, traveler_id, budget=budget)
     if traveler:
         result["traveler"] = traveler
     return result
@@ -487,6 +537,8 @@ def _resolve_natural_record(
     wf: str,
     user_context: dict[str, Any],
     is_vi: bool = False,
+    *,
+    budget: TurnBudget | None = None,
 ) -> tuple[str | None, str | None, str | None]:
     """Resolve trip_id / report_id via scoped list_my_trips / list_my_expenses when ID is omitted."""
     target_trip = decision.trip_id
@@ -495,8 +547,7 @@ def _resolve_natural_record(
         return target_trip, target_report, None
 
     if wf == "posttrip" and not target_trip:
-        temp = RunState("posttrip", user_context, phase="record_lookup")
-        exp_res = run_tool(temp, "list_my_expenses", {})
+        exp_res = _run_aux_tool(budget, "posttrip", user_context, "record_lookup", "list_my_expenses", {})
         reports = exp_res.get("data", []) if exp_res.get("ok") else []
         if not decision.destination and not decision.date_hint:
             if len(reports) == 1:
@@ -517,19 +568,19 @@ def _resolve_natural_record(
             return None, None, msg
 
     if not target_trip:
-        temp = RunState(wf if wf in _WORKFLOWS else "pretrip", user_context, phase="record_lookup")
+        wf_name = wf if wf in _WORKFLOWS else "pretrip"
         args: dict[str, Any] = {}
         if decision.destination:
             args["destination"] = decision.destination
         if decision.date_hint:
             args["date"] = decision.date_hint
-        res = run_tool(temp, "list_my_trips", args)
+        res = _run_aux_tool(budget, wf_name, user_context, "record_lookup", "list_my_trips", args)
         matches = res.get("data", []) if res.get("ok") else []
 
         if len(matches) == 1:
             candidate = matches[0]
             if decision.date_hint and wf == "intrip":
-                itin_res = run_tool(RunState("intrip", user_context, phase="flight_date_check"), "get_itinerary", {"trip_id": candidate["trip_id"]})
+                itin_res = _run_aux_tool(budget, "intrip", user_context, "flight_date_check", "get_itinerary", {"trip_id": candidate["trip_id"]})
                 flight = itin_res.get("data", {}).get("flight", {}) if itin_res.get("ok") else {}
                 flight_dates = {
                     str(flight.get("departure", ""))[:10],
@@ -583,7 +634,7 @@ def _resolve_natural_record(
             return None, None, msg
         else:
             # No match for the specified date/destination -> list available trips cleanly for clarification.
-            all_res = run_tool(RunState(wf if wf in _WORKFLOWS else "pretrip", user_context, phase="record_lookup"), "list_my_trips", {})
+            all_res = _run_aux_tool(budget, wf if wf in _WORKFLOWS else "pretrip", user_context, "record_lookup", "list_my_trips", {})
             all_trips = all_res.get("data", []) if all_res.get("ok") else []
             if not all_trips:
                 msg = (
@@ -603,8 +654,7 @@ def _resolve_natural_record(
             return None, None, msg
 
     if wf == "posttrip" and target_trip and not target_report:
-        temp = RunState("posttrip", user_context, phase="record_lookup")
-        exp_res = run_tool(temp, "list_my_expenses", {"trip_id": target_trip})
+        exp_res = _run_aux_tool(budget, "posttrip", user_context, "record_lookup", "list_my_expenses", {"trip_id": target_trip})
         reports = exp_res.get("data", []) if exp_res.get("ok") else []
         if len(reports) == 1:
             target_report = reports[0]["report_id"]
@@ -901,21 +951,30 @@ def _single_turn(
     approval_scope: dict[str, str] | None = None,
     trip_action: str | None = None,
     action_trip_id: str | None = None,
+    budget: TurnBudget | None = None,
+    llm_backend: str | None = None,
+    llm_client: Any | None = None,
+    use_tool_loop: bool = True,
 ) -> dict[str, Any]:
     """Process one conversational turn across 4 strict routes and log to UTF-8 CSV."""
     user = get_user(user_id)
     if not user:
         raise ValueError("Không tìm thấy tài khoản demo. Hãy chọn một người dùng trong danh sách.")
 
+    budget = budget or TurnBudget()
+    backend = get_backend(llm_backend, client=llm_client)
+    llm_meta = LLMCallMeta(backend=backend.name, model=getattr(backend, "model", None))
     user_context = {"user_id": user["user_id"], "role": user["role"], "session_id": session_id}
     output_format = "concise"
+    session_snapshot: dict[str, Any] = {}
     if user["role"] in {"Employee", "Reviewer", "Approver"}:
         output_format = get_preferences(user_context).get("preferred_output_format", "concise")
+        session_snapshot = get_session_state(user_context)
 
     is_vi = _is_vietnamese(message, user_context)
     if user["role"] != "Admin":
         if re.fullmatch(r"(?:TRIP|EXP)-\d{4}-\d{3}", message.strip(), re.I):
-            is_vi = get_session_state(user_context).get("session_language", "en") == "vi"
+            is_vi = session_snapshot.get("session_language", "en") == "vi"
         elif route_message_intent(message).route != "REJECT_SAFETY":
             set_session_value(user_context, "session_language", "vi" if is_vi else "en")
 
@@ -923,7 +982,9 @@ def _single_turn(
         from travel_agent.trip_actions import action_decision
         decision = action_decision(trip_action, action_trip_id)
     else:
-        decision = _resolve_with_session(route_message_intent(message), user_context, message)
+        raw_decision, nlu_meta = backend.classify_intent(message, session_state=session_snapshot, role=user["role"])
+        _merge_llm_meta(llm_meta, nlu_meta)
+        decision = _resolve_with_session(raw_decision, user_context, message)
 
     route = decision.route
     intent = decision.intent
@@ -938,9 +999,55 @@ def _single_turn(
     handoff_reason = ""
     result_payload: dict[str, Any] = {}
     state: RunState
+    loop_handled = False
+
+    if (
+        backend.name == "gemini"
+        and use_tool_loop
+        and trip_action is None
+        and route == "SELF_SERVE"
+        and user["role"] in {"Employee", "Reviewer"}
+        and intent in {"pretrip", "intrip", "posttrip", "policy_qa", "mixed", "trip_details", "itinerary_read"}
+        and budget.remaining() > 0
+    ):
+        wf_hint = intent if intent in _WORKFLOWS else "pretrip"
+        loop_state = RunState(wf_hint, user_context, phase="gemini_tool_loop", max_steps=budget.allocate(10))
+        loop_res, loop_meta = backend.run_tool_loop(
+            message=message,
+            state=loop_state,
+            session_state=session_snapshot,
+            is_vi=is_vi,
+        )
+        _merge_llm_meta(llm_meta, loop_meta)
+        budget.consume(loop_state.step_count)
+        if loop_res is not None:
+            loop_handled = True
+            state = loop_state
+            if state.outcome is None:
+                state.finish("completed")
+            outcome = state.outcome or "completed"
+            workflow_name = wf_hint
+            bot_response = loop_res["bot_response"]
+            citations = loop_res.get("citations", [])
+            result_payload = loop_res.get("result", {})
+            for ev in reversed(state.trace):
+                if ev.get("observation_status") == "ok":
+                    args = ev.get("safe_args", {})
+                    if not log_trip_id and isinstance(args.get("trip_id"), str) and not args["trip_id"].startswith("["):
+                        log_trip_id = args["trip_id"]
+                    if not log_report_id and isinstance(args.get("report_id"), str) and not args["report_id"].startswith("["):
+                        log_report_id = args["report_id"]
+            record_id = log_report_id or log_trip_id or record_id
+            if log_trip_id:
+                set_session_value(user_context, "active_trip_id", log_trip_id)
+            if log_report_id:
+                set_session_value(user_context, "active_report_id", log_report_id)
+            _audit_chat_event(user, state, log_trip_id, log_report_id, "gemini_tool_loop")
 
     # Role-specific routing for Admin & Approver before Employee/Reviewer workflows.
-    if intent == "approval_decision":
+    if loop_handled:
+        pass
+    elif intent == "approval_decision":
         route = "REJECT_SAFETY"
         state = RunState("pretrip", user_context, phase="approval_decision_boundary")
         state.finish("failed_validation")
@@ -1030,8 +1137,8 @@ def _single_turn(
 
     elif route == "SELF_SERVE" and intent in {"trip_details", "itinerary_read"}:
         wf = "intrip" if intent == "itinerary_read" else "pretrip"
-        trip_id, _, clarification = _resolve_natural_record(decision, wf, user_context, is_vi=is_vi)
-        state = RunState(wf, user_context, phase="read_details")
+        trip_id, _, clarification = _resolve_natural_record(decision, wf, user_context, is_vi=is_vi, budget=budget)
+        state = RunState(wf, user_context, phase="read_details", max_steps=budget.allocate(8) or 8)
         if clarification:
             route, outcome = "CLARIFY", "needs_input"
             state.finish(outcome)
@@ -1128,15 +1235,35 @@ def _single_turn(
 
     elif route == "SELF_SERVE" and intent == "policy_qa":
         workflow_name = "policy_qa"
-        state = RunState("pretrip", user_context, phase="policy_qa")
+        state = RunState("pretrip", user_context, phase="policy_qa", max_steps=budget.allocate(8) or 8)
         pol_cat = decision.policy_category or "travel"
-        rewritten_q, _ = rewrite_query(decision.policy_query or message, pol_cat, state=state)
+        rewritten_q, already_rewritten, rw_meta = backend.rewrite_policy_query(
+            decision.policy_query or message,
+            pol_cat,
+            state=state,
+        )
+        _merge_llm_meta(llm_meta, rw_meta)
         res = run_tool(state, "search_travel_policy", {
             "query": rewritten_q,
             "category": pol_cat,
             "max_results": 5,
         })
         data = res.get("data", {}) if res.get("ok") else {}
+        if res.get("ok") and data.get("no_result") and not already_rewritten and state.step_count < state.max_steps:
+            retry_q, changed, rw2_meta = backend.rewrite_policy_query(
+                decision.policy_query or message,
+                pol_cat,
+                state=state,
+                already_rewritten=already_rewritten,
+            )
+            _merge_llm_meta(llm_meta, rw2_meta)
+            if changed:
+                res = run_tool(state, "search_travel_policy", {
+                    "query": retry_q,
+                    "category": pol_cat,
+                    "max_results": 5,
+                })
+                data = res.get("data", {}) if res.get("ok") else {}
         results = data.get("results", [])
         conflicting_docs = {c.get("doc_id") for c in data.get("version_conflicts", [])}
         top_has_conflict = bool(results and results[0].get("doc_id") in conflicting_docs)
@@ -1183,7 +1310,7 @@ def _single_turn(
                   else ("pretrip" if intent == "mixed" else intent))
         )
         workflow_name = wf
-        resolved_trip, resolved_report, clarify_msg = _resolve_natural_record(decision, wf, user_context, is_vi=is_vi)
+        resolved_trip, resolved_report, clarify_msg = _resolve_natural_record(decision, wf, user_context, is_vi=is_vi, budget=budget)
         if clarify_msg:
             route = "CLARIFY"
             outcome = "needs_input"
@@ -1199,10 +1326,11 @@ def _single_turn(
             log_trip_id = resolved_trip
             log_report_id = resolved_report
             record_id = resolved_report if wf == "posttrip" else resolved_trip
-            max_steps = 10 if (intent == "mixed" or wf == "pretrip") else 8
+            desired_steps = 10 if (intent == "mixed" or wf == "pretrip") else 8
+            max_steps = budget.allocate(desired_steps) or 1
             state = RunState(wf, user_context, max_steps=max_steps)
             result_payload = _WORKFLOWS[wf](state, record_id)
-            _enrich_trip_and_traveler(result_payload, user, user_context, resolved_trip)
+            _enrich_trip_and_traveler(result_payload, user, user_context, resolved_trip, budget=budget)
             outcome = result_payload["outcome"]
             citations = _extract_citations(result_payload)
             facts_summary = _verified_facts(result_payload, resolved_trip, resolved_report)
@@ -1214,7 +1342,8 @@ def _single_turn(
                 temp_state.set_phase("mixed_policy_qa")
                 temp_state.step_count = state.step_count
                 mixed_cat = decision.policy_category or "travel"
-                rewritten_mixed_q, _ = rewrite_query(decision.policy_query, mixed_cat, state=temp_state)
+                rewritten_mixed_q, _, rw_meta = backend.rewrite_policy_query(decision.policy_query, mixed_cat, state=temp_state)
+                _merge_llm_meta(llm_meta, rw_meta)
                 p_res = run_tool(temp_state, "search_travel_policy", {
                     "query": rewritten_mixed_q,
                     "category": mixed_cat,
@@ -1291,7 +1420,7 @@ def _single_turn(
         outcome = "needs_human"
         handoff_ctx_result: dict[str, Any] = {}
         if decision.trip_id:
-            _enrich_trip_and_traveler(handoff_ctx_result, user, user_context, decision.trip_id)
+            _enrich_trip_and_traveler(handoff_ctx_result, user, user_context, decision.trip_id, budget=budget)
         facts_summary = _verified_facts(handoff_ctx_result, decision.trip_id, decision.report_id)
         bot_response = _format_handoff_response(
             handoff_id, handoff_reason, facts_summary, citations, output_format, result=handoff_ctx_result, is_vi=is_vi
@@ -1350,6 +1479,34 @@ def _single_turn(
         else:
             bot_response = detail
 
+    if (
+        not loop_handled
+        and backend.name == "gemini"
+        and route == "SELF_SERVE"
+        and not response_error
+        and workflow_name != "admin"
+        and intent not in {"greeting", "preference", "approval_decision", "admin_overview", "request_approval"}
+        and trip_action is None
+    ):
+        approval_status = None
+        if isinstance(result_payload.get("approval"), dict):
+            approval_status = result_payload["approval"].get("trip_approval_status")
+        elif isinstance(result_payload.get("trip"), dict):
+            approval_status = result_payload["trip"].get("trip_approval_status")
+        bot_response, synth_meta = backend.synthesize_response(
+            bot_response,
+            result_payload,
+            citations,
+            output_format=output_format,
+            is_vi=is_vi,
+            approval_status=approval_status,
+            state=state,
+        )
+        _merge_llm_meta(llm_meta, synth_meta)
+
+    if not loop_handled:
+        budget.consume(state.step_count)
+
     log_chat_turn(
         session_id=session_id,
         user_id=user["user_id"],
@@ -1389,6 +1546,8 @@ def _single_turn(
         "step_count": state.step_count,
         "trace": state.trace,
         "trip_references": _trip_references(state, result_payload, approval_scope) if route != "REJECT_SAFETY" else [],
+        "llm": llm_meta.to_dict(),
+        "total_step_budget": {"used": budget.used_steps, "max": budget.max_total_steps},
     }
 
 
@@ -1411,24 +1570,48 @@ def _trip_references(state, result, scope):
 
 
 def handle_turn(message, user_id, *, session_id='demo-session', approval_scope=None,
-                trip_action=None, action_trip_id=None):
-    """Xử lý tối đa bốn yêu cầu độc lập, mỗi yêu cầu giữ quyền và kết quả riêng."""
+                trip_action=None, action_trip_id=None, llm_backend=None, llm_client=None,
+                use_tool_loop=True):
+    """Xử lý tối đa bốn yêu cầu độc lập, mỗi yêu cầu giữ quyền, budget chung và kết quả riêng."""
+    budget = TurnBudget()
     # Kiểm tra injection trên cả tin nhắn trước khi chạy bất kỳ nhánh nào.
     unsafe = route_message_intent(message).intent == 'safety_adversarial'
     parts = re.split(r'[;\n]+|[.!?]\s+(?=[A-ZÀ-Ỹ])|\s+(?:và|đồng thời|sau đó|and|then)\s+(?=(?:xem|kiểm tra|yêu cầu|chuẩn bị|phê duyệt|tạo|check|show|prepare|request|review)\b)', message, flags=re.I)
     parts = [p.strip() for p in parts if p.strip()]
     if trip_action is not None or unsafe or len(parts) < 2:
         return _single_turn(message, user_id, session_id=session_id, approval_scope=approval_scope,
-                            trip_action=trip_action, action_trip_id=action_trip_id)
+                            trip_action=trip_action, action_trip_id=action_trip_id,
+                            budget=budget, llm_backend=llm_backend, llm_client=llm_client,
+                            use_tool_loop=use_tool_loop)
     if len(parts) > 4:
         return {'route':'CLARIFY','intent':'multiple_requests','outcome':'needs_input',
                 'bot_response':'Hãy gửi tối đa 4 yêu cầu trong một tin nhắn, tách bằng dấu chấm phẩy.',
                 'responses':[], 'trip_references':[], 'trace':[], 'step_count':0,
-                'citations':[], 'handoff_required':False, 'error':None, 'result':{}}
-    responses = [_single_turn(p, user_id, session_id=session_id, approval_scope=approval_scope) for p in parts]
+                'citations':[], 'handoff_required':False, 'error':None, 'result':{},
+                'llm':LLMCallMeta().to_dict(),
+                'total_step_budget':{'used':0, 'max':budget.max_total_steps}}
+    responses = [
+        _single_turn(p, user_id, session_id=session_id, approval_scope=approval_scope,
+                     budget=budget, llm_backend=llm_backend, llm_client=llm_client,
+                     use_tool_loop=use_tool_loop)
+        for p in parts
+    ]
     outcomes = {r['outcome'] for r in responses}
     all_denied = all(r['route'] == 'REJECT_SAFETY' for r in responses)
     refs = {(r['trip_id'],r.get('action_type')):r for response in responses for r in response.get('trip_references',[])}
+    agg_llm = LLMCallMeta()
+    for r in responses:
+        r_llm = r.get('llm') or {}
+        if r_llm.get('backend') == 'gemini':
+            agg_llm.backend = 'gemini'
+        agg_llm.model = agg_llm.model or r_llm.get('model')
+        agg_llm.latency_ms += float(r_llm.get('latency_ms') or 0.0)
+        agg_llm.input_tokens += int(r_llm.get('input_tokens') or 0)
+        agg_llm.output_tokens += int(r_llm.get('output_tokens') or 0)
+        agg_llm.fallback_used = agg_llm.fallback_used or bool(r_llm.get('fallback_used'))
+        agg_llm.fallback_reason = agg_llm.fallback_reason or r_llm.get('fallback_reason')
+        agg_llm.query_rewritten = agg_llm.query_rewritten or bool(r_llm.get('query_rewritten'))
+        agg_llm.tool_loop_steps += int(r_llm.get('tool_loop_steps') or 0)
     return {'route':'REJECT_SAFETY' if all_denied else 'SELF_SERVE', 'intent':'multiple_requests',
             'outcome': next(iter(outcomes)) if len(outcomes)==1 else 'partial',
             'bot_response':'\n\n'.join(f"Yêu cầu {i+1}: {part}\n{r['bot_response']}" for i,(part,r) in enumerate(zip(parts,responses))),
@@ -1438,4 +1621,6 @@ def handle_turn(message, user_id, *, session_id='demo-session', approval_scope=N
             'handoff_required':any(r['handoff_required'] for r in responses),
             'handoff_id':None, 'error':responses[0]['error'] if all_denied else None,
             'step_count':sum(r['step_count'] for r in responses),
-            'trace':[e for r in responses for e in r['trace']]}
+            'trace':[e for r in responses for e in r['trace']],
+            'llm':agg_llm.to_dict(),
+            'total_step_budget':{'used':budget.used_steps, 'max':budget.max_total_steps}}

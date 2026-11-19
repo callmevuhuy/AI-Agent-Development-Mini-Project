@@ -1,204 +1,236 @@
-# Trợ lý điều hành công tác doanh nghiệp
+# Trợ lý điều hành công tác doanh nghiệp (Global Business Travel Operations Agent)
 
-Kịch bản trình bày ba workflow và quyền các role: [Kịch bản demo web](demo/DEMO_WEB.md).
+Nguyên mẫu điều phối ba quy trình nghiệp vụ công tác doanh nghiệp: chuẩn bị trước chuyến đi (Pre-trip), hỗ trợ sự cố trong chuyến đi (In-trip) và rà soát chi phí sau chuyến đi (Post-trip). Hệ thống sử dụng dữ liệu giả lập cục bộ và hỗ trợ hai chế độ thực thi:
 
-Chat hỗ trợ tối đa bốn yêu cầu trong một tin nhắn, tách bằng dấu chấm phẩy, xuống dòng hoặc liên từ trước một yêu cầu tường minh. Giao diện hiện từng kết quả riêng, giữ lỗi/quyền/outcome của từng phần; đây là các thao tác tuần tự, không phải giao dịch nguyên tử. Injection được kiểm tra trên cả tin nhắn trước khi thực hiện. Mỗi phần giữ budget/retry của lượt riêng.
+- **Chế độ mặc định (`rule` — Ngoại tuyến):** Định tuyến NLU, truy xuất BM25, tính toán, kiểm tra quyền và sinh phản hồi bằng quy tắc xác định; không cần API key hoặc kết nối Internet khi chạy.
+- **Chế độ tùy chọn (`gemini` — Hybrid Agent với Gemini API):** Kết hợp mô hình Gemini cho nhận diện ý định (Structured Output), viết lại truy vấn chính sách 1-hop (RAG Query Rewrite), vòng lặp đề xuất công cụ (Function Calling) và tổng hợp câu trả lời có hậu kiểm citation/phê duyệt. Mọi lời gọi công cụ vẫn đi qua cùng tầng kiểm soát phân quyền, JSON Schema và ngân sách bước ở phía máy chủ.
 
-Phản hồi workflow/handoff không tự đính kèm toàn bộ chi tiết Trip kể cả khi chọn định dạng chi tiết. Thẻ Trip dưới phản hồi mở bằng rê chuột hoặc focus bàn phím, gọi `/api/trip/reference` để kiểm tra lại quyền và đọc nguồn hiện tại. Scope hỗ trợ của Approver chỉ hiện dữ kiện hành trình, không mở hồ sơ chuyến. Citation policy vẫn độc lập với tham chiếu Trip. Muốn đọc đầy đủ, hỏi tường minh “Xem chi tiết chuyến TRIP-…”.
+Tài liệu tham chiếu kịch bản trình diễn: [Kịch bản demo web](demo/DEMO_WEB.md) và [Kịch bản kiểm thử hội thoại](demo/DEMO_SCENARIOS.md).
 
-Nguyên mẫu hỗ trợ chuẩn bị chuyến công tác, xử lý sự cố trong chuyến đi và rà soát chi phí sau chuyến đi. Hệ thống chạy ngoại tuyến với dữ liệu giả lập; định tuyến, phân quyền, tính toán và đánh giá được thực hiện bằng quy tắc xác định.
+---
 
-## Tải dự án và chuẩn bị môi trường
+## Yêu cầu hệ thống và cài đặt
 
-Yêu cầu **Python 3.11 trở lên** và Internet khi cài dependencies lần đầu. Không cần API key, Node.js, cơ sở dữ liệu hoặc file `.env`; sau khi cài, demo chạy ngoại tuyến với dữ liệu giả lập.
+Yêu cầu **Python 3.11 trở lên** và kết nối Internet ở lần cài đặt dependencies đầu tiên. Thực hiện các lệnh từ thư mục gốc của dự án (thư mục chứa `README.md`, `requirements.txt`, `pyproject.toml` và `data/`).
 
-Clone repository bằng Git hoặc tải **Code → Download ZIP** rồi giải nén. Trong VS Code, chọn **File → Open Folder** mở thư mục dự án, sau đó **Terminal → New Terminal**. Terminal phải ở thư mục chứa `README.md`, `requirements.txt`, `pyproject.toml` và `data/`. Không chạy trong thư mục ZIP chưa giải nén. Các lệnh dưới đây dùng đường dẫn tương đối, không phụ thuộc tên tài khoản hay ổ đĩa.
-
-### Windows / PowerShell
-
-Cài Python và chọn **Add Python to PATH**. Kiểm tra:
+### Windows (PowerShell)
 
 ```powershell
 python --version
-Get-Location
 Test-Path .\pyproject.toml
-```
-
-Python phải từ 3.11 trở lên và lệnh cuối phải trả `True`. Nếu `python` không được nhận diện hoặc mở Microsoft Store, thử `py -3 --version`; nếu lệnh này chạy được, dùng `py -3 -m venv .venv` ở bước tạo môi trường bên dưới. Nếu cả hai đều không chạy được, cài Python rồi mở terminal mới.
-
-**Lần đầu cài đặt** (chỉ tạo `.venv` khi chưa tồn tại):
-
-```powershell
 if (-not (Test-Path .\.venv)) { python -m venv .venv }
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m pip check
 .\.venv\Scripts\python.exe -m travel_agent.app --help
 ```
 
-Nếu dùng `py` thay cho `python`, thay dòng đầu bằng `if (-not (Test-Path .\.venv)) { py -3 -m venv .venv }`.
-
-`pip check` phải báo `No broken requirements found`; lệnh cuối hiển thị các lệnh CLI. `requirements.txt` cài `jsonschema`, `pytest` và chính dự án ở chế độ chỉnh sửa (`-e .`). Dùng trực tiếp Python trong `.venv`, không cần activate hoặc đổi Execution Policy.
-
-**Các lần chạy sau:** bỏ qua bước tạo môi trường, chạy lệnh web hoặc test bên dưới. Khi cập nhật mã nguồn có thay đổi dependencies, dừng demo rồi chạy lại lệnh `pip install -r requirements.txt`.
+Nếu hệ thống dùng launcher `py` thay cho `python`, thay `python` bằng `py -3`. Lệnh `pip check` phải trả `No broken requirements found`. `requirements.txt` cài `jsonschema>=4.23`, `google-genai>=1.0.0`, `pytest>=8.0` và gói dự án ở chế độ chỉnh sửa (`-e .`).
 
 ### macOS / Linux (bash hoặc zsh)
 
-Cài Python 3.11 trở lên bằng công cụ cài đặt của hệ điều hành. Tại thư mục gốc dự án:
-
 ```bash
 python3 --version
-test -f pyproject.toml && echo "Đúng thư mục dự án"
+test -f pyproject.toml
 if [ ! -d .venv ]; then python3 -m venv .venv; fi
 ./.venv/bin/python -m pip install -r requirements.txt
 ./.venv/bin/python -m pip check
 ./.venv/bin/python -m travel_agent.app --help
 ```
 
-Trên Ubuntu/Debian, nếu thiếu `venv`/`ensurepip`, cài gói `python3-venv` (hoặc gói `python3.x-venv` tương ứng với phiên bản đang dùng) rồi tạo lại môi trường. Từ phần tiếp theo, các lệnh minh họa dùng PowerShell; trên macOS/Linux thay `.\.venv\Scripts\python.exe` bằng `./.venv/bin/python`, giữ nguyên arguments.
+---
 
-## Chạy giao diện web
+## Khởi động giao diện web
 
-Sau khi cài môi trường, tại thư mục gốc dự án chạy:
+### Tùy chọn 1: Chế độ ngoại tuyến mặc định (`rule`)
+
+Không cần thiết lập `GEMINI_API_KEY`.
+
+**Windows (PowerShell):**
 
 ```powershell
 .\.venv\Scripts\python.exe -m travel_agent.app web --host 127.0.0.1 --port 8080
 ```
 
-Trên macOS/Linux:
+**macOS / Linux:**
 
 ```bash
 ./.venv/bin/python -m travel_agent.app web --host 127.0.0.1 --port 8080
 ```
 
-Giữ terminal này đang chạy và tự mở [http://127.0.0.1:8080](http://127.0.0.1:8080) trong trình duyệt **trên cùng máy**. Nhấn **Ctrl+C** trong terminal chạy server để dừng. Mở terminal thứ hai tại cùng thư mục dự án nếu muốn chạy CLI/test song song; không tạo lại `.venv` khi demo đang chạy.
+### Tùy chọn 2: Chế độ Hybrid với Gemini API (`gemini`)
 
-Nếu cổng 8080 đang được dùng hoặc báo `WinError 10048`, dừng phiên demo cũ hoặc chọn cổng khác:
+Thiết lập biến môi trường `GEMINI_API_KEY` và chọn backend `gemini` (hoặc giữ mặc định `rule` và chuyển backend ngay tại mục **Backend xử lý (LLM)** ở thanh bên của giao diện web).
+
+**Windows (PowerShell):**
 
 ```powershell
-.\.venv\Scripts\python.exe -m travel_agent.app web --host 127.0.0.1 --port 8081
+$env:GEMINI_API_KEY = "<YOUR_GEMINI_API_KEY>"
+$env:TRAVEL_AGENT_LLM_BACKEND = "gemini"
+# Tùy chọn model và timeout (giá trị mặc định bên dưới):
+$env:TRAVEL_AGENT_GEMINI_MODEL = "gemini-2.5-flash"
+$env:TRAVEL_AGENT_GEMINI_TIMEOUT = "15.0"
+
+.\.venv\Scripts\python.exe -m travel_agent.app web --host 127.0.0.1 --port 8080
 ```
 
-Khi đó mở [http://127.0.0.1:8081](http://127.0.0.1:8081). Giao diện có Chat, Trips, Drafts, Handoff, Audit log và Memory & Trace. Tài khoản được chọn từ dữ liệu giả lập, chưa phải đăng nhập production. Kịch bản trình diễn: [Kịch bản demo web](demo/DEMO_WEB.md).
+**macOS / Linux:**
 
-### Xử lý lỗi môi trường
+```bash
+export GEMINI_API_KEY="<YOUR_GEMINI_API_KEY>"
+export TRAVEL_AGENT_LLM_BACKEND="gemini"
+export TRAVEL_AGENT_GEMINI_MODEL="gemini-2.5-flash"
+export TRAVEL_AGENT_GEMINI_TIMEOUT="15.0"
 
-- **`Unable to copy ... venvlauncher.exe ... .venv\Scripts\python.exe`**: đang tạo lại môi trường và có thể gặp file bị khóa. Dừng web demo bằng **Ctrl+C** tại terminal đang chạy demo, dừng các phiên Python/debugger dùng môi trường này. Nếu `.venv` vẫn chạy được, không tạo lại; kiểm tra bằng `.\.venv\Scripts\python.exe -m pip check` rồi chạy demo. Không chạy `python -m venv .venv` trong lúc môi trường đang được sử dụng.
-- **Môi trường hỏng, sao chép từ máy khác hoặc chuyển đường dẫn**: `.venv` không dùng để chia sẻ giữa các máy. Sau khi dừng mọi tiến trình dùng môi trường, đổi tên `.venv` thành một thư mục dự phòng chưa tồn tại (ví dụ `Rename-Item -LiteralPath .venv -NewName .venv.backup` trong PowerShell), rồi làm lại bước cài đặt lần đầu. Nếu vẫn lỗi ghi file, kiểm tra quyền ghi thư mục hoặc phần mềm bảo vệ trên máy.
-- **`No module named travel_agent`, `jsonschema` hoặc `pytest`**: dùng đúng Python của `.venv`, kiểm tra đang ở thư mục gốc rồi chạy lại `.\.venv\Scripts\python.exe -m pip install -r requirements.txt`.
-- **Không tìm thấy `.venv\Scripts\python.exe`**: môi trường chưa được tạo thành công hoặc là môi trường của hệ điều hành khác; xử lý như môi trường hỏng ở trên.
-- **Không tìm thấy `requirements.txt` hoặc `pyproject.toml`**: mở terminal ở thư mục gốc dự án.
-- **Cài dependencies lỗi mạng/proxy**: kiểm tra kết nối Internet và cấu hình proxy của máy, sau đó chạy lại lệnh cài; chưa chạy demo/test khi cài đặt còn báo lỗi.
-- **`WinError 10013` khi mở localhost hoặc chạy test HTTP**: môi trường thực thi có thể chặn socket. Trong Codex cần cho phép lệnh chạy ngoài sandbox; hoặc chạy trong PowerShell cục bộ. Nếu vẫn lỗi, kiểm tra quyền mạng/firewall của Python và thử cổng khác.
+./.venv/bin/python -m travel_agent.app web --host 127.0.0.1 --port 8080
+```
 
-Thông báo lỗi luôn dùng tiếng Việt và giữ mã kỹ thuật để tra cứu. Truy cập dữ liệu ngoài phạm vi dùng thông báo chung; thao tác không phù hợp với role nêu rõ role, thao tác bị hạn chế và người có thể hỗ trợ. Phản hồi chỉ trình bày kết quả, căn cứ và bước tiếp theo; không chèn câu nhắc thừa về các hành động agent chưa làm.
+Truy cập [http://127.0.0.1:8080](http://127.0.0.1:8080) trên trình duyệt cục bộ. Nếu cổng `8080` đã được sử dụng, đổi tham số `--port` (ví dụ `--port 8081`).
 
-API của các tab áp dụng quyền tại server: Employee chỉ xem chuyến và bản nháp của mình; Reviewer xem được các chuyến và bản nháp; Approver đọc hồ sơ trong phạm vi phê duyệt qua chat; Admin xem tổng quan, audit, tải CSV và reset dữ liệu chạy thử. Lịch sử chat và hàng đợi hỗ trợ giới hạn theo tài khoản, riêng Admin được xem toàn bộ. Đổi tài khoản sẽ xóa nội dung đang hiển thị và bỏ qua phản hồi cũ đến muộn.
+Giao diện web gồm các màn hình: **Chat với Agent**, **Trips · Chuyến công tác**, **Drafts · Bản nháp**, **Handoff · Yêu cầu hỗ trợ**, **Audit log · Nhật ký hoạt động**, và **Memory & Trace**. Khi chọn tài khoản mới trên giao diện, dữ liệu hiển thị của tài khoản cũ được xóa và các phản hồi đến muộn bị bỏ qua.
 
-## Chạy bằng dòng lệnh
+---
+
+## Chạy bằng dòng lệnh (CLI)
+
+Các lệnh CLI dùng chung cấu hình biến môi trường (`TRAVEL_AGENT_LLM_BACKEND=rule` hoặc `gemini`). Trên macOS/Linux thay `.\.venv\Scripts\python.exe` bằng `./.venv/bin/python`.
 
 ```powershell
-# Hội thoại nhiều lượt
+# Hội thoại nhiều lượt (chế độ tương tác)
 .\.venv\Scripts\python.exe -m travel_agent.app chat --user U-EMP-002 --session demo-1
 
-# Một câu hỏi có mã chuyến đi
+# Gửi một tin nhắn đơn
 .\.venv\Scripts\python.exe -m travel_agent.app message --user U-EMP-002 --text "Chuyến bay TRIP-2026-002 bị trễ, tôi nên làm gì?"
 
-# Ba quy trình nghiệp vụ
+# Chạy trực tiếp ba quy trình nghiệp vụ
 .\.venv\Scripts\python.exe -m travel_agent.app run pretrip --user U-EMP-002 --id TRIP-2026-006
 .\.venv\Scripts\python.exe -m travel_agent.app run intrip --user U-EMP-002 --id TRIP-2026-002
 .\.venv\Scripts\python.exe -m travel_agent.app run posttrip --user U-EMP-002 --id EXP-2026-001
 
-# Tạo yêu cầu phê duyệt đang chờ, chỉ cho chủ chuyến đi
+# Tạo yêu cầu phê duyệt trạng thái pending (chỉ Employee sở hữu chuyến đi)
 .\.venv\Scripts\python.exe -m travel_agent.app request-approval --user U-EMP-001 --trip TRIP-2026-001 --action checklist_review --summary "Đề nghị xem xét checklist."
 
-# Chức năng chỉ đọc dành cho Admin
+# Truy vấn chỉ đọc dành cho Admin và đọc log CSV
 .\.venv\Scripts\python.exe -m travel_agent.app admin-trips --user U-ADM-001
 .\.venv\Scripts\python.exe -m travel_agent.app admin-audit --user U-ADM-001 --trip TRIP-2026-004
 .\.venv\Scripts\python.exe -m travel_agent.app handoffs --status open
 .\.venv\Scripts\python.exe -m travel_agent.app logs --limit 20
 ```
 
-## Cấu hình môi trường
+---
+
+## Cấu hình biến môi trường
 
 | Biến | Mặc định | Công dụng |
 |---|---|---|
-| `TRAVEL_AGENT_DATA_DIR` | `data/` | Thư mục dữ liệu JSON giả lập |
-| `TRAVEL_AGENT_DRAFT_DIR` | `data/drafts/` | Nơi lưu bản nháp |
-| `TRAVEL_AGENT_MEMORY_DIR` | `data/memory/` | Nơi lưu ngữ cảnh phiên và tùy chọn |
-| `TRAVEL_AGENT_LOG_DIR` | `data/logs/` | Nơi lưu CSV UTF-8 BOM |
-| `TRAVEL_AGENT_DEMO_TODAY` | Ngày hệ thống | Ngày tham chiếu ISO cho câu hỏi hôm nay/ngày mai |
+| `TRAVEL_AGENT_DATA_DIR` | `data/` | Thư mục chứa dữ liệu JSON giả lập |
+| `TRAVEL_AGENT_DRAFT_DIR` | `data/drafts/` | Nơi lưu bản nháp nghiệp vụ |
+| `TRAVEL_AGENT_MEMORY_DIR` | `data/memory/` | Nơi lưu ngữ cảnh phiên và tùy chọn cá nhân |
+| `TRAVEL_AGENT_LOG_DIR` | `data/logs/` | Nơi lưu tệp CSV UTF-8 BOM |
+| `TRAVEL_AGENT_DEMO_TODAY` | Ngày hệ thống | Ngày tham chiếu định dạng `YYYY-MM-DD` cho truy vấn tương đối |
+| `TRAVEL_AGENT_LLM_BACKEND` | `rule` | Backend xử lý ngôn ngữ: `rule` (ngoại tuyến) hoặc `gemini` (Gemini API) |
+| `GEMINI_API_KEY` | Không đặt | Khóa API Google Gemini; chỉ đọc từ môi trường, không lưu vào trace, audit hoặc CSV |
+| `TRAVEL_AGENT_GEMINI_MODEL` | `gemini-2.5-flash` | Tên model Gemini cho NLU, RAG rewrite, Tool Loop và tổng hợp phản hồi |
+| `TRAVEL_AGENT_GEMINI_TIMEOUT` | `15.0` | Giới hạn thời gian chờ phản hồi API Gemini (giây, trong khoảng `1.0`–`60.0`) |
 
-Lịch giả lập nằm trong khoảng `2026-12-01` đến `2027-01-07`. Dùng ID hoặc ngày đầy đủ để kết quả không phụ thuộc ngày chạy.
+Dữ liệu chuyến đi giả lập nằm trong khoảng từ `2026-12-01` đến `2027-01-07`.
 
-## Định tuyến hội thoại
+---
 
-| Tuyến | Khi sử dụng |
+## Kiến trúc xử lý và ranh giới an toàn
+
+### 1. Định tuyến bốn luồng
+
+| Tuyến | Phạm vi áp dụng |
 |---|---|
-| `SELF_SERVE` | Lời chào, danh sách chuyến theo quyền, quy trình nghiệp vụ, tra cứu chính sách, quản lý tùy chọn, tạo yêu cầu pending tường minh và chức năng quản trị chỉ đọc |
-| `CLARIFY` | Thiếu ID, nhiều chuyến phù hợp, ngày không khớp hoặc thiếu thông tin/chứng từ |
-| `HANDOFF_STAFF` | Thiếu căn cứ, xung đột chính sách, sự cố cần người xử lý, chuyến bị hủy hoặc người dùng yêu cầu chuyển hỗ trợ |
-| `REJECT_SAFETY` | ID sai, chỉ thị vượt quy tắc, thao tác bị cấm theo role hoặc dữ liệu ngoài scope |
+| `SELF_SERVE` | Lời chào, danh sách chuyến theo quyền, ba quy trình nghiệp vụ, tra cứu chính sách có nguồn, quản lý tùy chọn cá nhân, tạo yêu cầu `pending` tường minh và thao tác quản trị chỉ đọc |
+| `CLARIFY` | Thiếu mã định danh, nhiều bản ghi khớp cùng lúc, ngày bay không trùng lịch sử hoặc thiếu chứng từ bắt buộc |
+| `HANDOFF_STAFF` | Thiếu bằng chứng chính sách, xung đột phiên bản chính sách đang hiệu lực, chuyến đi bị hủy/cần can thiệp hoặc người dùng yêu cầu nhân viên hỗ trợ |
+| `REJECT_SAFETY` | Sai định dạng ID, chỉ thị vượt quy tắc (injection), thao tác ngoài thẩm quyền vai trò hoặc truy cập bản ghi ngoài phạm vi |
 
-`request_approval` tạo pending khi Employee yêu cầu rõ ràng, ví dụ `Yêu cầu phê duyệt checklist TRIP-2026-006`. Yêu cầu quyết định phê duyệt qua chat bị từ chối riêng, không bị nhầm thành thao tác tạo pending.
+Chat hỗ trợ tối đa bốn yêu cầu độc lập trong một tin nhắn (tách bằng dấu chấm phẩy, xuống dòng hoặc liên từ trước yêu cầu tường minh); tin nhắn được kiểm tra an toàn tổng thể trước khi thực thi từng phần tuần tự.
 
-## Vai trò và quyền
+### 2. Lớp Hybrid Gemini API (`src/travel_agent/llm.py`)
+
+Khi kích hoạt backend `gemini`:
+
+1. **Tiền kiểm an toàn (Round-1 Guard):** Các mẫu prompt injection, chuỗi vượt `1000` ký tự và ID sai định dạng bị chặn bởi `nlu.py` trước khi phát sinh lời gọi API Gemini.
+2. **NLU có cấu trúc:** Sử dụng Structured Output (`response_json_schema`) để phân loại ý định, đại từ nối ngữ cảnh và trích xuất thực thể; từ chối hoặc bỏ qua mọi trường cố gắng thay đổi `user_id`, `role` hoặc `approval_scope`.
+3. **Vòng lặp gọi công cụ & Hậu kiểm:** Đề xuất công cụ và tham số từ `TOOL_REGISTRY` đi qua `run_tool()` → `dispatcher.dispatch()`, giữ nguyên kiểm tra JSON Schema (`Draft202012Validator`), quyền sở hữu và phạm vi duyệt. Mọi phản hồi `SELF_SERVE` do model tạo đều qua `check_generated_response()` để bảo đảm giữ trích dẫn và không khẳng định trạng thái đã duyệt/hoàn tiền khi `trip_approval_status != "approved"`.
+4. **Cơ chế Fallback:** Khi thiếu `GEMINI_API_KEY`, quá thời gian chờ (`timeout`), gặp giới hạn tốc độ (`429`) hoặc đầu ra không qua hậu kiểm, hệ thống tự động chuyển về luồng `rule` tương ứng.
+
+### 3. Vai trò và phân quyền
 
 | Tài khoản | Role | Quyền chính | Giới hạn |
 |---|---|---|---|
-| `U-EMP-001` đến `U-EMP-004` | Employee | Xem và xử lý chuyến, hành trình, chi phí, tùy chọn của mình; tạo pending cho chuyến của mình | Không đọc dữ liệu người khác hoặc audit |
-| `U-REV-001` | Reviewer | Rà soát mọi chuyến, chi phí, bản nháp và chính sách được cấp | Không tạo yêu cầu thay Employee hoặc quyết định phê duyệt |
-| `U-APR-001` | Approver | Đọc hồ sơ và danh mục chính sách thuộc một `approval_scope` đang pending; quản lý tùy chọn cá nhân | Không duyệt danh sách rộng, rà soát chi phí, tạo draft hoặc ra quyết định qua agent |
-| `U-ADM-001` | Admin | Xem tổng quan, audit, hàng đợi hỗ trợ, tải CSV và reset runtime | Không chạy quy trình nghiệp vụ, tra policy hoặc dùng memory cá nhân |
+| `U-EMP-001` đến `U-EMP-004` | Employee | Xem/xử lý chuyến, hành trình, chi phí, tùy chọn cá nhân và tạo yêu cầu `pending` cho chuyến của mình | Không truy cập hồ sơ người khác hoặc audit log |
+| `U-REV-001` | Reviewer | Rà soát mọi chuyến đi, chi phí, bản nháp và tra cứu chính sách được cấp | Không tạo yêu cầu phê duyệt thay Employee hoặc ra quyết định phê duyệt |
+| `U-APR-001` | Approver | Đọc hồ sơ và danh mục chính sách thuộc một `approval_scope` đang `pending` được phân công; quản lý tùy chọn cá nhân | Không duyệt danh sách toàn công ty, không rà soát chi phí, không tạo bản nháp và không phê duyệt qua chat |
+| `U-ADM-001` | Admin | Xem tổng quan chuyến đi, audit log, hàng đợi handoff, tải CSV và reset dữ liệu chạy thử | Không chạy quy trình nghiệp vụ, không tra cứu chính sách và không dùng bộ nhớ cá nhân |
 
-## Memory và dispatcher
+### 4. Bộ nhớ, Dispatcher và Ngân sách bước
 
-Session memory giữ `active_trip_id`, `active_report_id`, `last_workflow`, `pending_slot`, `pending_intent`, `session_language` theo người dùng và phiên; TTL mặc định 30 phút, gia hạn khi ghi. Preferences chỉ gồm ngôn ngữ và định dạng phản hồi, chỉ ghi/xóa khi người dùng yêu cầu. Dữ kiện nghiệp vụ luôn lấy lại từ công cụ.
+- **Bộ nhớ:** Session memory lưu `active_trip_id`, `active_report_id`, `last_workflow`, `pending_slot`, `pending_intent`, `session_language` theo `(user_id, session_id)` với TTL mặc định 30 phút (`1800s`). Preferences (`response_language`, `preferred_output_format`) chỉ ghi hoặc xóa khi có yêu cầu hợp lệ (`memory_write_authorized=true`).
+- **Dispatcher & Budget:** Mỗi `RunState` có mặc định 8 bước (10 bước cho pre-trip/mixed qua chat, trần `12` bước) và tối đa 2 lần thử lại đối với lỗi `retryable=true`. Toàn bộ một lượt `handle_turn()` (bao gồm tra cứu phụ và batch tối đa 4 yêu cầu) bị giới hạn bởi ngân sách tổng `TOTAL_TURN_MAX_STEPS = 32` (`TurnBudget`).
+- **Thao tác Web & Tham chiếu:** Menu Trips dùng `/api/trip/action` kiểm tra lại quyền và `approval_scope` tại máy chủ. Các thẻ tham chiếu Trip mở trên giao diện gọi `/api/trip/reference` để đọc lại dữ liệu nguồn hiện tại theo quyền. API quản lý bản nháp (`/api/draft/detail`, `/api/draft/save`, `/api/draft/recheck`) chỉ cho phép chỉnh các trường đề xuất được liệt kê và luôn đối chiếu dữ liệu nguồn bất biến.
 
-Dispatcher kiểm tra registry, allowlist theo workflow, JSON Schema, quyền theo role/scope, ngân sách và cấu trúc kết quả. Orchestrator điều phối retry và ghi trace. Mặc định có 8 bước cho một `RunState`, trần cấu hình 12; chat pre-trip/mixed dùng 10. Lookup phụ có state riêng nên đây không phải trần tổng cho toàn bộ tin nhắn. Chỉ retry lỗi `retryable=true`, tối đa hai lần sau lần gọi đầu.
+---
 
 ## Cấu trúc dự án
 
 | Đường dẫn | Nội dung |
 |---|---|
-| `data/` | Dữ liệu giả lập và các thư mục runtime: bản nháp, memory, CSV |
-| `src/travel_agent/app.py` | Điểm vào ứng dụng và CLI |
-| `src/travel_agent/nlu.py` | Nhận diện ID, ngày, điểm đến, ý định theo mẫu Anh–Việt |
-| `src/travel_agent/conversation.py` | Điều phối hội thoại và định dạng phản hồi |
-| `src/travel_agent/dispatcher.py` | Kiểm tra tool call và phân quyền |
-| `src/travel_agent/registry.py` | 19 công cụ và allowlist |
-| `src/travel_agent/errors.py` | Thông báo lỗi chung và lỗi thao tác theo role |
-| `src/travel_agent/memory/` | Lưu ngữ cảnh phiên và tùy chọn |
-| `src/travel_agent/rag/` | BM25 ngoại tuyến, citation, kiểm tra căn cứ và phiên bản |
-| `src/travel_agent/workflows/` | Ba quy trình trước, trong và sau chuyến đi |
-| `src/travel_agent/web_demo.py` | HTTP server và giao diện web |
-| `tests/`, `eval/` | Test tự động, đánh giá và báo cáo |
+| `data/` | Dữ liệu giả lập (`trips.json`, `expenses.json`, `policy_chunks.json`, `audit_events.json`, `approval_requests.json`, ...) và thư mục runtime |
+| `src/travel_agent/app.py` | Điểm vào ứng dụng và giao diện dòng lệnh (CLI) |
+| `src/travel_agent/config.py` | Cấu hình đường dẫn runtime, ngân sách bước và biến môi trường LLM |
+| `src/travel_agent/nlu.py` | Tiền kiểm an toàn và nhận diện ý định/thực thể xác định |
+| `src/travel_agent/llm.py` | Dual-backend `RuleBased` / `Gemini API` (NLU, 1-hop query rewrite, Tool Loop, Post-Guard, `TurnBudget`) |
+| `src/travel_agent/conversation.py` | Điều phối hội thoại bốn luồng và định dạng phản hồi |
+| `src/travel_agent/dispatcher.py` | Kiểm tra hợp đồng công cụ, JSON Schema và phân quyền tại máy chủ |
+| `src/travel_agent/registry.py` | Đăng ký 19 công cụ và allowlist theo quy trình |
+| `src/travel_agent/schemas/` | JSON Schema định nghĩa tham số của 19 công cụ |
+| `src/travel_agent/errors.py` | Thông báo lỗi chuẩn hóa theo mã kỹ thuật và vai trò |
+| `src/travel_agent/memory/` | Lưu trữ ngữ cảnh phiên và tùy chọn cá nhân theo cơ chế ghi nguyên tử |
+| `src/travel_agent/rag/` | Truy xuất BM25 ngoại tuyến, trích dẫn, kiểm tra căn cứ và xung đột phiên bản |
+| `src/travel_agent/workflows/` | Ba quy trình Pre-trip (`a_pretrip.py`), In-trip (`b_intrip.py`), Post-trip (`c_posttrip.py`) |
+| `src/travel_agent/web_demo.py` | HTTP server thư viện chuẩn và giao diện web demo |
+| `tests/`, `eval/` | Bộ kiểm thử tự động (`pytest`, Node UI smoke) và kịch bản đánh giá |
 
-## Kiểm thử và ghi log
+---
 
-Sau khi cài dependencies, mở terminal tại thư mục gốc dự án. Lệnh đầu chạy toàn bộ test; lệnh thứ hai chỉ chạy nhóm test quyền và memory. Evaluator tạo báo cáo đánh giá; `compileall` kiểm tra cú pháp.
+## Kiểm thử và đánh giá
+
+Các bộ kiểm thử tiêu chuẩn chạy hoàn toàn ngoại tuyến ở chế độ `rule` và sử dụng bản sao dữ liệu tạm thời.
+
+**Windows (PowerShell):**
 
 ```powershell
+# Toàn bộ bộ test tự động (gồm HTTP test và Gemini mock tests)
 .\.venv\Scripts\python.exe -m pytest -v --basetemp .venv/pytest-tmp
+
+# Nhóm test phân quyền và bộ nhớ
 .\.venv\Scripts\python.exe -m pytest tests -v -k "scope or permission or role or preference or ttl" --basetemp .venv/pytest-tmp
+
+# Bộ đánh giá định lượng 62 ca xác định
 .\.venv\Scripts\python.exe eval/run_eval.py --label after
+
+# Kiểm tra biên dịch cú pháp
 .\.venv\Scripts\python.exe -m compileall -q src tests eval demo
 ```
 
-Trên macOS/Linux, chạy toàn bộ test và đánh giá bằng:
+**Đánh giá so sánh khi có `GEMINI_API_KEY` (tùy chọn):**
 
-```bash
-./.venv/bin/python -m pytest -v --basetemp .venv/pytest-tmp
-./.venv/bin/python eval/run_eval.py --label after
-./.venv/bin/python -m compileall -q src tests eval demo
+```powershell
+$env:GEMINI_API_KEY = "<YOUR_GEMINI_API_KEY>"
+.\.venv\Scripts\python.exe eval/run_eval_llm.py --backend both
 ```
 
-Test thành công kết thúc bằng `passed`, không có `failed`/`ERROR`; evaluator in số ca `passed`/`failed` và đường dẫn báo cáo. `compileall -q` thành công không in lỗi. Thư mục `.venv/pytest-tmp` dành riêng cho pytest và được pytest dọn lại mỗi lần chạy; không lưu tài liệu vào đó hoặc chạy nhiều bộ test đồng thời với cùng `--basetemp`.
+Tệp CSV hội thoại và hàng đợi handoff (`chat_history.csv`, `handoff_queue.csv`) dùng mã hóa UTF-8 BOM và che một số mẫu nhạy cảm (số thẻ 13–19 chữ số, token `sk-...`, `ghp_...`, `Bearer ...` và Google API key `AIza...`). Audit JSON kỹ thuật không lưu nguyên văn tin nhắn người dùng.
 
-Pytest và evaluator dùng bản sao dữ liệu tạm. Evaluator ghi kết quả vào `eval/reports/` và trace vào `eval/traces/`. Hội thoại demo ghi CSV có che mẫu token/số thẻ; audit kỹ thuật không ghi nguyên văn tin nhắn. Đây chưa phải cơ chế lọc mọi loại dữ liệu nhạy cảm.
+Xem thêm: [Kịch bản demo web](demo/DEMO_WEB.md), [Ma trận kiểm thử](Given%20Docs/TEST_MATRIX.md) và [Đối chiếu yêu cầu](REQUIREMENTS_COMPLIANCE_EVIDENCE.md).
 
-Xem [kịch bản demo](demo/DEMO_SCENARIOS.md), [ma trận kiểm thử](Given%20Docs/TEST_MATRIX.md) và [đối chiếu yêu cầu](REQUIREMENTS_COMPLIANCE_EVIDENCE.md).
+---
 
-## Danh mục bàn giao theo mục 14 của đề bài
+## Danh mục bàn giao theo mục 14
 
 | Mục | Dẫn chứng |
 |---|---|
@@ -211,33 +243,13 @@ Xem [kịch bản demo](demo/DEMO_SCENARIOS.md), [ma trận kiểm thử](Given%
 | 14.7 Test và phân tích lỗi | `Given Docs/TEST_MATRIX.md`, `eval/reports/root_cause.md` |
 | 14.8 Đánh giá trước/sau và hồi quy | `eval/reports/` |
 | 14.9 Demo | `demo/` |
-| 14.10 Giới hạn | Phần dưới và `Given Docs/AGENTS.md` |
+| 14.10 Giới hạn | Mục Giới hạn bên dưới và `Given Docs/AGENTS.md` |
+
+---
 
 ## Giới hạn hiện tại
 
-- NLU nhận diện bằng mẫu và từ khóa; chưa hiểu mọi cách diễn đạt tiếng Anh hoặc tiếng Việt. BM25 chủ yếu dựa trên ngôn ngữ của kho chính sách.
-- Kiểm tra căn cứ dùng từ khóa, câu và phủ định; chưa có mô hình suy luận ngữ nghĩa hoặc LLM bên ngoài.
-- JSON/CSV cục bộ chưa có cơ sở dữ liệu, đăng nhập, mã hóa hay audit bất biến cấp production. Memory chưa có cơ chế giải quyết ghi đồng thời ở nhiều tiến trình.
-- Agent chỉ tạo bản nháp và yêu cầu pending. Đặt vé, thanh toán, hoàn tiền, quyết định phê duyệt, gửi email, lập lịch nền và tích hợp bên ngoài nằm ngoài phạm vi.
-
-## Cập nhật workspace và phản hồi
-
-Trips có bốn tác vụ riêng: xem chi tiết, xem hành trình, kiểm tra checklist và yêu cầu hỗ trợ. Admin xem audit liên quan; Approver xem danh sách pending được phân công trong Trips, rồi đọc hồ sơ theo scope qua chat. Chọn tác vụ gửi đúng ý định, không ghép đọc dữ kiện với checklist. Ngữ cảnh phiên giữ tác vụ cần làm rõ và ngôn ngữ khi người dùng trả lời bằng ID.
-
-Draft giữ mã `DR-…` độc lập với Trip/Expense nguồn. Employee chủ hồ sơ và Reviewer được mở đầy đủ dữ kiện nguồn, hành trình, các trường thiếu và nội dung/citation bản nháp. Chỉ ghi chú, mục đích đề xuất và checklist đề xuất được sửa. Các API `/api/draft/detail`, `/api/draft/save`, `/api/draft/recheck` kiểm tra quyền tại server; không cho sửa identity, approval, dữ kiện nguồn hoặc citation. Kiểm tra lại dùng nguồn thật của mock; nội dung đề xuất được giữ qua lần tạo lại, không tự làm nguồn đầy đủ.
-
-Thông báo không có chức năng không tự tạo phiếu. Pending hiển thị riêng với trạng thái chuyến; yêu cầu hỗ trợ có trạng thái riêng trên Trips. Thẻ prompt dùng nhãn kết quả mong đợi và mã CASE. Các nhánh an toàn kiểm tra nguyên câu tiếng Việt trước lookup/clarification.
-
-Evaluator bổ sung 31 thẻ web vào 31 ca nền; tỷ lệ chọn tool và arguments đo trên các thẻ, số bước/retry lấy từ trace. Task completion loại các ca safety khỏi mẫu số. Grounding vẫn chỉ có claim đại diện; chưa phải benchmark ngữ nghĩa rộng.
-
-## Yêu cầu được phân công cho Approver
-
-Trips của Approver chỉ trả metadata tối thiểu cho request `pending` có `assigned_approver_id` bằng tài khoản hiện tại. Hai seed 001/checklist_review và 002/escalation thuộc U-APR-001; không thêm Trip mới. Danh sách rỗng hiển thị thông báo bình thường, không tạo handoff. Server kiểm tra lại quyền khi đọc chi tiết; chọn scope phía client không tự cấp quyền. Thiếu phân công, đổi người hoặc request đã resolved đều làm scope cũ mất hiệu lực.
-
-Chọn scope tường minh trước khi xem; nút trên dòng khác chuyến hoặc khác loại yêu cầu bị khóa và không tự đổi scope. `checklist_review`/`publish_request` đọc hồ sơ chuyến và trạng thái duyệt; `escalation` đọc hành trình. Yêu cầu xem chi tiết không tự chuyển thành xem hành trình. Trips gửi tác vụ cụ thể qua `/api/trip/action`, dùng cùng bộ điều phối và dispatcher với chat. Server kiểm tra scope của dòng, phân công hiện tại, loại dữ kiện và quyền của tài khoản. Menu lấy `allowed_actions` từ server: Employee có bốn tác vụ; Reviewer không có tạo yêu cầu phê duyệt; Admin chỉ có audit.
-
-Yêu cầu pending mới được application mô phỏng phân công mặc định cho U-APR-001; model không được truyền người phê duyệt qua arguments. Helper quyết định bên ngoài tool set cũng phải kiểm tra phân công. Chưa có quyết định approve/reject qua chat.
-
-Lỗi quyền dùng câu “Bạn không có quyền truy cập dữ liệu hoặc thực hiện thao tác này”, giữ code unauthorized_scope. Không dùng câu này cho giới hạn chức năng (ví dụ đặt phòng) hoặc lỗi đầu vào. Thiếu scope được nhắc chọn request được phân công, không tự tạo phiếu hỗ trợ.
-
-
+- Ở chế độ ngoại tuyến (`rule`), NLU và BM25 phụ thuộc vào mẫu từ khóa và cấu trúc câu tiếng Anh/tiếng Việt đã định nghĩa; ở chế độ `gemini`, chất lượng nhận diện câu tự nhiên và suy luận đa bước phụ thuộc vào model và kết nối Gemini API.
+- Bộ kiểm tra căn cứ cục bộ (`claim_evidence_check.py`) kiểm tra theo tập từ khóa và phủ định tiếng Anh; hậu kiểm LLM kiểm tra giữ trích dẫn và chặn khẳng định phê duyệt chưa được xác thực, chưa thay thế mô hình NLI ngữ nghĩa chuyên biệt.
+- Lưu trữ JSON/CSV cục bộ và tài khoản demo chưa thay thế cơ sở dữ liệu quan hệ, hệ thống xác thực người dùng, mã hóa lưu trữ hoặc cơ chế kiểm soát ghi đồng thời đa tiến trình ở môi trường production.
+- Agent chỉ tạo bản nháp và yêu cầu `pending`; các thao tác đặt vé, thanh toán, hoàn tiền, quyết định phê duyệt, gửi email và tác vụ nền nằm ngoài phạm vi nguyên mẫu.
