@@ -15,6 +15,7 @@ from typing import Any
 
 from travel_agent.config import (
     DEFAULT_MAX_STEPS,
+    SUPPORTED_GEMINI_MODELS,
     TOTAL_TURN_MAX_STEPS,
     get_gemini_api_key,
     get_gemini_model,
@@ -133,9 +134,17 @@ def _sanitize_error_reason(exc: Exception) -> str:
     low = msg.lower()
     if "timeout" in low or "timed out" in low:
         return "timeout"
-    if "429" in low or "quota" in low or "rate" in low:
+    if "429" in low or "quota" in low or "resource_exhausted" in low:
         return "rate_limited"
-    return type(exc).__name__
+    code = getattr(exc, "code", None)
+    status = getattr(exc, "status", None)
+    detail = getattr(exc, "message", None) or msg
+    if isinstance(detail, str) and "AIza" in detail:
+        detail = re.sub(r"AIza[0-9A-Za-z_-]{10,}", "[REDACTED_KEY]", detail)
+    if code or status:
+        short_detail = " ".join(str(detail or "").split())[:120]
+        return f"{type(exc).__name__}({code or ''} {status or ''}: {short_detail})".strip()
+    return f"{type(exc).__name__}: {' '.join(msg.split())[:100]}" if msg else type(exc).__name__
 
 
 def _contains_safety_pattern(text: str) -> bool:
@@ -147,7 +156,13 @@ def _contains_safety_pattern(text: str) -> bool:
 def _parse_nlu_payload(raw_text: str, message: str) -> RouteDecision | None:
     if not raw_text:
         return None
-    data = json.loads(raw_text)
+    cleaned = raw_text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE | re.DOTALL).strip()
+    start, end = cleaned.find("{"), cleaned.rfind("}")
+    if start != -1 and end > start:
+        cleaned = cleaned[start : end + 1]
+    data = json.loads(cleaned)
     if not isinstance(data, dict):
         return None
     route = data.get("route")
@@ -200,6 +215,7 @@ def check_generated_response(
     if approval_status != "approved" and _APPROVAL_CLAIM_RE.search(generated_text):
         return False, "unverified_approval_claim"
     tags: list[str] = []
+    alt_tokens: list[str] = []
     for cit in citations:
         if not isinstance(cit, str) or not cit.strip():
             continue
@@ -207,12 +223,16 @@ def check_generated_response(
         required_tag = match.group(1) if match else cit.strip("[]").split(",")[0].strip()
         if required_tag:
             tags.append(required_tag)
+            alt_tokens.append(required_tag)
+        chunk_match = re.search(r"\b(POL-[A-Z0-9-]+)\b", cit)
+        if chunk_match:
+            alt_tokens.append(chunk_match.group(1))
     if tags:
         if require_all_citations:
             for tag in tags:
                 if tag not in generated_text:
                     return False, f"missing_citation:{tag}"
-        elif not any(tag in generated_text for tag in tags):
+        elif not any(tok in generated_text for tok in alt_tokens):
             return False, f"missing_citation:{tags[0]}"
     return True, None
 
@@ -235,19 +255,58 @@ def _role_tool_names(role: str, workflow: str | None = None) -> list[str]:
     return sorted(allowed)
 
 
+def _to_gemini_schema_dict(raw: dict[str, Any]) -> dict[str, Any]:
+    """Convert JSON Schema Draft 2020-12 to Gemini OpenAPI Schema dict (server validates full Draft 2020-12)."""
+    schema_type = raw.get("type", "object")
+    nullable = bool(raw.get("nullable"))
+    if isinstance(schema_type, list):
+        nullable = nullable or ("null" in schema_type)
+        non_null = [t for t in schema_type if t != "null"]
+        schema_type = non_null[0] if non_null else "string"
+    out: dict[str, Any] = {"type": str(schema_type).upper()}
+    if nullable:
+        out["nullable"] = True
+    if isinstance(raw.get("description"), str) and raw["description"]:
+        out["description"] = raw["description"]
+    if isinstance(raw.get("enum"), list) and raw["enum"]:
+        out["enum"] = [str(item) for item in raw["enum"]]
+    if out["type"] == "OBJECT":
+        props = raw.get("properties")
+        if isinstance(props, dict) and props:
+            out["properties"] = {k: _to_gemini_schema_dict(v) for k, v in props.items() if isinstance(v, dict)}
+        elif raw.get("additionalProperties") is True:
+            out["properties"] = {
+                "summary": {"type": "STRING"},
+                "status": {"type": "STRING"},
+            }
+        if isinstance(raw.get("required"), list) and isinstance(out.get("properties"), dict):
+            req = [r for r in raw["required"] if r in out["properties"]]
+            if req:
+                out["required"] = req
+    elif out["type"] == "ARRAY":
+        items = raw.get("items")
+        out["items"] = _to_gemini_schema_dict(items if isinstance(items, dict) else {"type": "string"})
+    return out
+
+
 def build_gemini_tools(role: str, workflow: str | None = None) -> list[Any]:
-    """Convert contract-verified TOOL_REGISTRY schemas to Gemini FunctionDeclarations."""
+    """Convert contract-verified TOOL_REGISTRY schemas to Gemini OpenAPI FunctionDeclarations."""
     from google.genai import types
 
-    declarations = [
-        types.FunctionDeclaration(
-            name=name,
-            description=TOOL_REGISTRY[name].description,
-            parameters_json_schema=TOOL_REGISTRY[name].schema,
+    declarations = []
+    for name in _role_tool_names(role, workflow):
+        if name not in TOOL_REGISTRY:
+            continue
+        spec = TOOL_REGISTRY[name]
+        gemini_schema = _to_gemini_schema_dict(spec.schema)
+        params = types.Schema.model_validate(gemini_schema) if gemini_schema.get("properties") else None
+        declarations.append(
+            types.FunctionDeclaration(
+                name=name,
+                description=spec.description,
+                parameters=params,
+            )
         )
-        for name in _role_tool_names(role, workflow)
-        if name in TOOL_REGISTRY
-    ]
     return [types.Tool(function_declarations=declarations)] if declarations else []
 
 
@@ -293,8 +352,106 @@ class RuleBasedBackend:
         return None, LLMCallMeta(backend="rule")
 
 
+def _strip_model_prefix(name: str) -> str:
+    raw = str(name or "").strip()
+    if "/models/" in raw:
+        raw = raw.rsplit("/models/", 1)[-1]
+    elif raw.startswith("models/"):
+        raw = raw[len("models/") :]
+    return raw
+
+
+def list_available_gemini_models(*, client: Any | None = None) -> list[str]:
+    """List Gemini models supporting generateContent for the active API key."""
+    try:
+        if client is None:
+            api_key = get_gemini_api_key()
+            if not api_key:
+                return list(SUPPORTED_GEMINI_MODELS)
+            from google import genai
+            from google.genai import types
+
+            client = genai.Client(
+                api_key=api_key,
+                http_options=types.HttpOptions(
+                    client_args={"timeout": 10.0},
+                    retry_options=types.HttpRetryOptions(attempts=1),
+                ),
+            )
+        pager = client.models.list(config={"page_size": 100})
+        discovered: list[str] = []
+        for item in pager:
+            name = _strip_model_prefix(getattr(item, "name", ""))
+            actions = getattr(item, "supported_actions", None) or []
+            if "gemini" not in name.lower():
+                continue
+            if any(bad in name.lower() for bad in ("embedding", "imagen", "-image", "banana", "veo", "aqa", "tts")):
+                continue
+            if actions and "generateContent" not in actions:
+                continue
+            if name not in discovered:
+                discovered.append(name)
+        if not discovered:
+            return list(SUPPORTED_GEMINI_MODELS)
+        preferred = [m for m in SUPPORTED_GEMINI_MODELS if m in discovered]
+        others = [m for m in discovered if m not in preferred]
+        return preferred + others
+    except Exception:
+        return list(SUPPORTED_GEMINI_MODELS)
+
+
+def _is_model_not_found_error(exc: Exception) -> bool:
+    code = getattr(exc, "code", None)
+    status = str(getattr(exc, "status", "") or "").upper()
+    msg = str(exc).lower()
+    return code == 404 or status == "NOT_FOUND" or ("404" in msg and "not" in msg and "found" in msg)
+
+
+def _is_transient_server_error(exc: Exception) -> bool:
+    if isinstance(exc, TimeoutError):
+        return False
+    code = getattr(exc, "code", None)
+    status = str(getattr(exc, "status", "") or "").upper()
+    msg = str(exc).lower()
+    return (
+        code in {500, 502, 503, 504}
+        or status in {"DEADLINE_EXCEEDED", "UNAVAILABLE", "INTERNAL"}
+        or "deadline_exceeded" in msg
+        or "504" in msg
+        or "503" in msg
+    )
+
+
+def _is_bad_request_error(exc: Exception) -> bool:
+    code = getattr(exc, "code", None)
+    status = str(getattr(exc, "status", "") or "").upper()
+    msg = str(exc).lower()
+    return code == 400 or status == "INVALID_ARGUMENT" or "invalid_argument" in msg
+
+
+def _default_thinking_config(model_name: str, *, minimal: bool = False) -> Any | None:
+    """Choose fast low-overhead thinking config compatible with Gemini 2.5 / 3.x / 4.x."""
+    from google.genai import types
+
+    low = (model_name or "").lower()
+    if any(tag in low for tag in ("gemini-3", "gemini-4", "hydrogen")):
+        level = types.ThinkingLevel.MINIMAL if minimal else types.ThinkingLevel.LOW
+        return types.ThinkingConfig(thinking_level=level)
+    if "2.5" in low and "flash" in low:
+        return types.ThinkingConfig(thinking_budget=0)
+    return None
+
+
+def _without_thinking_config(config: Any) -> Any:
+    if config is None or getattr(config, "thinking_config", None) is None:
+        return config
+    if hasattr(config, "model_copy"):
+        return config.model_copy(update={"thinking_config": None})
+    return config
+
+
 class GeminiBackend:
-    """Optional Gemini API backend with fail-safe deterministic fallback."""
+    """Optional Gemini API backend compatible across Gemini versions with auto-discovery and failover."""
 
     name = "gemini"
 
@@ -308,6 +465,7 @@ class GeminiBackend:
         self.model = get_gemini_model(model)
         self.timeout = timeout if timeout is not None else get_gemini_timeout()
         self._injected_client = client
+        self._tried_models: set[str] = set()
 
     def _get_client(self) -> Any:
         if self._injected_client is not None:
@@ -320,12 +478,56 @@ class GeminiBackend:
 
         return genai.Client(
             api_key=api_key,
-            http_options=types.HttpOptions(timeout=int(self.timeout * 1000)),
+            http_options=types.HttpOptions(
+                client_args={"timeout": float(self.timeout)},
+                retry_options=types.HttpRetryOptions(attempts=1),
+            ),
         )
 
-    def _generate(self, contents: Any, config: Any) -> Any:
+    def _pick_replacement_model(self, client: Any, failed_model: str, discovered: list[str] | None = None) -> str | None:
+        self._tried_models.add(failed_model)
+        live = discovered if discovered is not None else list_available_gemini_models(client=client)
+        # Prefer curated fast models that actually exist in live discovery, then any other live models.
+        prioritized = [m for m in SUPPORTED_GEMINI_MODELS if m in live]
+        candidates = list(dict.fromkeys([*prioritized, *live, *SUPPORTED_GEMINI_MODELS]))
+        for cand in candidates:
+            if cand not in self._tried_models:
+                return cand
+        return None
+
+    def _call_with_thinking_fallback(self, client: Any, model: str, contents: Any, config: Any) -> Any:
+        try:
+            return client.models.generate_content(model=model, contents=contents, config=config)
+        except Exception as exc:
+            if _is_bad_request_error(exc) and getattr(config, "thinking_config", None) is not None:
+                return client.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=_without_thinking_config(config),
+                )
+            raise
+
+    def _generate(self, contents: Any, config: Any, *, max_model_hops: int = 4) -> Any:
         client = self._get_client()
-        return client.models.generate_content(model=self.model, contents=contents, config=config)
+        discovered: list[str] | None = None
+        last_exc: Exception | None = None
+        for hop in range(max_model_hops):
+            try:
+                return self._call_with_thinking_fallback(client, self.model, contents, config)
+            except Exception as exc:
+                last_exc = exc
+                if not (_is_model_not_found_error(exc) or _is_transient_server_error(exc)) or hop + 1 >= max_model_hops:
+                    raise
+                if discovered is None:
+                    discovered = list_available_gemini_models(client=client)
+                replacement = self._pick_replacement_model(client, self.model, discovered=discovered)
+                if not replacement:
+                    raise
+                self.model = replacement
+                if hasattr(config, "model_copy") and getattr(config, "thinking_config", None) is not None:
+                    config = config.model_copy(update={"thinking_config": _default_thinking_config(self.model)})
+        assert last_exc is not None
+        raise last_exc
 
     def classify_intent(
         self,
@@ -371,9 +573,20 @@ class GeminiBackend:
             config = types.GenerateContentConfig(
                 temperature=0.0,
                 response_mime_type="application/json",
-                response_json_schema=_NLU_RESPONSE_SCHEMA,
+                response_schema=types.Schema.model_validate(_to_gemini_schema_dict(_NLU_RESPONSE_SCHEMA)),
+                thinking_config=_default_thinking_config(self.model),
             )
-            response = self._generate(prompt, config)
+            try:
+                response = self._generate(prompt, config)
+            except Exception as schema_exc:
+                if not _is_bad_request_error(schema_exc):
+                    raise
+                json_only_prompt = (
+                    prompt
+                    + "\n\nReturn ONLY valid JSON with keys: route, intent, trip_id, report_id, "
+                    "destination, date_hint, policy_query, policy_category, reason."
+                )
+                response = self._generate(json_only_prompt, types.GenerateContentConfig(temperature=0.0))
             parsed = _parse_nlu_payload(getattr(response, "text", ""), message)
             elapsed = (time.perf_counter() - started) * 1000.0
             in_tok, out_tok = _extract_usage(response)
@@ -426,7 +639,11 @@ class GeminiBackend:
                 f"Category: {category}\n"
                 f"Question: {query[:300]}"
             )
-            config = types.GenerateContentConfig(temperature=0.0, max_output_tokens=64)
+            config = types.GenerateContentConfig(
+                temperature=0.0,
+                max_output_tokens=512,
+                thinking_config=_default_thinking_config(self.model),
+            )
             response = self._generate(prompt, config)
             elapsed = (time.perf_counter() - started) * 1000.0
             in_tok, out_tok = _extract_usage(response)
@@ -492,13 +709,17 @@ class GeminiBackend:
                 f"Rewrite the verified travel assistant response naturally in {lang} ({output_format} style).\n"
                 "STRICT RULES:\n"
                 "1. Use ONLY the verified facts and deterministic draft below. Never invent IDs, amounts, dates, or policy rules.\n"
-                "2. Keep EVERY citation tag verbatim (for example: [TRAVEL-APPROVAL §2.1, v1.0]).\n"
+                "2. Keep EVERY citation tag verbatim (for example: [TRAVEL-APPROVAL §2.1 v1.0 · POL-APR-001]).\n"
                 f"3. Current verified trip_approval_status is: {approval_status or 'unknown'}. NEVER claim approved/refunded unless status is 'approved'.\n\n"
                 f"Verified facts JSON:\n{json.dumps(facts_payload, ensure_ascii=False)[:3000]}\n\n"
                 f"Required citations: {json.dumps(citations, ensure_ascii=False)}\n\n"
                 f"Deterministic reference response:\n{deterministic_text}"
             )
-            config = types.GenerateContentConfig(temperature=0.2, max_output_tokens=700)
+            config = types.GenerateContentConfig(
+                temperature=0.2,
+                max_output_tokens=2048,
+                thinking_config=_default_thinking_config(self.model),
+            )
             response = self._generate(prompt, config)
             elapsed = (time.perf_counter() - started) * 1000.0
             in_tok, out_tok = _extract_usage(response)
@@ -568,7 +789,7 @@ class GeminiBackend:
                 "You are an enterprise Business Travel Operations Agent using verified mock tools.\n"
                 f"Respond in {lang}. Use tools to gather facts and policy citations before answering.\n"
                 "NEVER invent record IDs, dates, expenses, or policy caps. NEVER fabricate approvals or execute real bookings/payments.\n"
-                "Include exact policy citations (e.g. [DOC §SECTION, vX.Y]) in your final reply."
+                "Include exact policy citations from tool output (e.g. [DOC §SECTION v1.0 · CHUNK_ID]) in your final reply."
             )
             contents: list[Any] = [
                 f"Role: {role}\nSession context: {json.dumps(session_state or {}, ensure_ascii=False)}\nUser message: {message}"
@@ -577,6 +798,7 @@ class GeminiBackend:
                 temperature=0.0,
                 system_instruction=system_text,
                 tools=tools,
+                thinking_config=_default_thinking_config(self.model),
             )
 
             for _ in range(max_rounds):
@@ -694,9 +916,48 @@ class GeminiBackend:
             )
 
 
-def get_backend(backend_name: str | None = None, *, client: Any | None = None) -> RuleBasedBackend | GeminiBackend:
+def probe_gemini_connection(model: str | None = None, *, client: Any | None = None) -> dict[str, Any]:
+    """Perform a fast live ping against Gemini API to verify key, model, and connectivity."""
+    backend = GeminiBackend(model=model, timeout=15.0, client=client)
+    started = time.perf_counter()
+    try:
+        from google.genai import types
+
+        cfg = types.GenerateContentConfig(
+            temperature=0.0,
+            thinking_config=_default_thinking_config(backend.model, minimal=True),
+        )
+        resp = backend._generate("Reply with exactly: OK", cfg, max_model_hops=3)
+        elapsed = round((time.perf_counter() - started) * 1000.0, 2)
+        text = str(getattr(resp, "text", "") or "").strip()[:40]
+        return {
+            "ok": True,
+            "online": True,
+            "model": backend.model,
+            "latency_ms": elapsed,
+            "reply": text or "OK",
+        }
+    except Exception as exc:
+        elapsed = round((time.perf_counter() - started) * 1000.0, 2)
+        available = list_available_gemini_models(client=client)[:8]
+        return {
+            "ok": False,
+            "online": False,
+            "model": backend.model,
+            "latency_ms": elapsed,
+            "error": _sanitize_error_reason(exc),
+            "available_models": available,
+        }
+
+
+def get_backend(
+    backend_name: str | None = None,
+    *,
+    model: str | None = None,
+    client: Any | None = None,
+) -> RuleBasedBackend | GeminiBackend:
     """Resolve active LLM backend instance from argument or environment configuration."""
     resolved = get_llm_backend(backend_name)
     if resolved == "gemini":
-        return GeminiBackend(client=client)
+        return GeminiBackend(model=model, client=client)
     return RuleBasedBackend()

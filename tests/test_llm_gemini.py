@@ -259,3 +259,219 @@ def test_phase5_web_backend_toggle_and_budget_across_batch():
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_gemini_schema_conversion_and_error_redaction():
+    from google import genai
+    from google.genai import _common, models as gmodels, types
+    from travel_agent.llm import _NLU_RESPONSE_SCHEMA, _sanitize_error_reason, _to_gemini_schema_dict, build_gemini_tools
+
+    client = genai.Client(api_key="DUMMY", http_options=types.HttpOptions(timeout=15000))
+    nlu_schema = types.Schema.model_validate(_to_gemini_schema_dict(_NLU_RESPONSE_SCHEMA))
+    p_nlu = types._GenerateContentParameters(
+        model="gemini-2.5-flash",
+        contents="Chuyến này có bị trễ bay không?",
+        config=types.GenerateContentConfig(temperature=0.0, response_mime_type="application/json", response_schema=nlu_schema),
+    )
+    b_nlu = _common.convert_to_dict(gmodels._GenerateContentParameters_to_mldev(client._api_client, p_nlu, None, p_nlu))
+    assert "responseSchema" in b_nlu["generationConfig"]
+    assert b_nlu["generationConfig"]["responseSchema"]["properties"]["trip_id"]["nullable"] is True
+
+    for role, wf in [("Employee", "pretrip"), ("Employee", "intrip"), ("Employee", "posttrip"), ("Admin", "admin")]:
+        tools = build_gemini_tools(role, wf)
+        p_tools = types._GenerateContentParameters(
+            model="gemini-2.5-flash",
+            contents=["Check trip"],
+            config=types.GenerateContentConfig(temperature=0.0, system_instruction="sys", tools=tools),
+        )
+        b_tools = _common.convert_to_dict(gmodels._GenerateContentParameters_to_mldev(client._api_client, p_tools, None, p_tools))
+        for decl in b_tools["tools"][0]["functionDeclarations"]:
+            assert "parameters_json_schema" not in decl
+            assert "allOf" not in json.dumps(decl)
+            assert "additionalProperties" not in json.dumps(decl)
+
+    class _FakeApiErr(Exception):
+        code = 400
+        status = "INVALID_ARGUMENT"
+        message = "Bad schema for key AIzaSySecretKey1234567890"
+
+    reason = _sanitize_error_reason(_FakeApiErr("400 INVALID_ARGUMENT"))
+    assert "400" in reason and "INVALID_ARGUMENT" in reason
+    assert "AIzaSySecretKey" not in reason
+
+
+def test_model_alias_and_live_probe_endpoint(monkeypatch):
+    import threading
+    import urllib.error
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+    from travel_agent.config import get_gemini_model
+    from travel_agent.llm import probe_gemini_connection
+    from travel_agent.web_demo import make_handler
+
+    assert get_gemini_model("gemini-flash") == "gemini-3.8-flash"
+    assert get_gemini_model("gemini-3.1") == "gemini-3.1-flash-lite"
+    assert get_gemini_model("gemini-pro") == "gemini-2.5-pro"
+
+    ok_probe = probe_gemini_connection(model="gemini-flash", client=_MockGeminiClient([_resp(text="OK")]))
+    assert ok_probe["ok"] is True and ok_probe["online"] is True
+    assert ok_probe["model"] == "gemini-3.8-flash"
+
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler())
+    port = server.server_address[1]
+    th = threading.Thread(target=server.serve_forever, daemon=True)
+    th.start()
+    try:
+        base = f"http://127.0.0.1:{port}"
+        res = json.loads(urllib.request.urlopen(base + "/api/llm/check?model=gemini-flash").read().decode("utf-8"))
+        assert res["ok"] is False and res["online"] is False
+        assert res["model"] == "gemini-3.8-flash"
+
+        models_res = json.loads(urllib.request.urlopen(base + "/api/llm/models").read().decode("utf-8"))
+        assert "gemini-3.8-flash" in models_res["models"]
+
+        try:
+            urllib.request.urlopen(base + "/api/llm/check?model=../bad")
+            raise AssertionError("Expected HTTP 400")
+        except urllib.error.HTTPError as err:
+            assert err.code == 400
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_auto_model_discovery_recovers_from_retired_model_404_and_schema_fallback():
+    from travel_agent.llm import probe_gemini_connection
+
+    class _NotFoundErr(Exception):
+        code = 404
+        status = "NOT_FOUND"
+        message = "Model models/gemini-2.5-flash is no longer available"
+
+    class _BadSchemaErr(Exception):
+        code = 400
+        status = "INVALID_ARGUMENT"
+        message = "response_schema unsupported"
+
+    class _DiscoveryModels:
+        def __init__(self):
+            self.called_models = []
+
+        def list(self, *, config=None):
+            return [
+                SimpleNamespace(name="models/gemini-3.8-flash", supported_actions=["generateContent"]),
+                SimpleNamespace(name="models/gemini-3.8", supported_actions=["generateContent"]),
+            ]
+
+        def generate_content(self, *, model, contents, config):
+            self.called_models.append(model)
+            if model == "gemini-2.5-flash":
+                raise _NotFoundErr("404 NOT_FOUND")
+            if getattr(config, "response_schema", None) is not None:
+                raise _BadSchemaErr("400 INVALID_ARGUMENT")
+            if getattr(config, "tools", None):
+                return _resp(text="OK")
+            return _resp(text=json.dumps({
+                "route": "HANDOFF_STAFF",
+                "intent": "handoff_requested",
+                "reason": "Recovered via auto-discovery and JSON fallback",
+            }))
+
+    client = SimpleNamespace(models=_DiscoveryModels())
+    probe = probe_gemini_connection(model="gemini-2.5-flash", client=client)
+    assert probe["ok"] is True and probe["model"] == "gemini-3.8-flash"
+
+    turn = chat_turn(
+        "Tôi cần hỗ trợ từ nhân viên",
+        "U-EMP-001",
+        session_id="g-auto",
+        llm_backend="gemini",
+        llm_model="gemini-2.5-flash",
+        llm_client=client,
+        use_tool_loop=False,
+    )
+    assert turn["route"] == "HANDOFF_STAFF"
+    assert turn["llm"]["model"] == "gemini-3.8-flash"
+    assert turn["llm"]["fallback_used"] is False
+
+
+def test_504_deadline_failover_and_curated_model_coverage():
+    from travel_agent.config import SUPPORTED_GEMINI_MODELS, get_gemini_model
+    from travel_agent.llm import probe_gemini_connection
+
+    assert "gemini-3.8-flash" in SUPPORTED_GEMINI_MODELS
+    assert "gemini-4-hydrogen" in SUPPORTED_GEMINI_MODELS
+    assert "gemini-3.1-flash-lite" in SUPPORTED_GEMINI_MODELS
+    assert "gemini-3.5-flash" in SUPPORTED_GEMINI_MODELS
+    assert get_gemini_model("gemini-hydrogen") == "gemini-4-hydrogen"
+
+    class _DeadlineErr(Exception):
+        code = 504
+        status = "DEADLINE_EXCEEDED"
+        message = "Deadline expired before operation could complete."
+
+    class _FailoverModels:
+        def __init__(self):
+            self.calls = []
+
+        def list(self, *, config=None):
+            return [
+                SimpleNamespace(name="models/gemini-3.8-flash", supported_actions=["generateContent"]),
+                SimpleNamespace(name="models/gemini-4-hydrogen", supported_actions=["generateContent"]),
+                SimpleNamespace(name="models/gemini-3.5-flash", supported_actions=["generateContent"]),
+            ]
+
+        def generate_content(self, *, model, contents, config):
+            self.calls.append((model, getattr(config, "thinking_config", None)))
+            if model == "gemini-3.8-flash":
+                raise _DeadlineErr("504 DEADLINE_EXCEEDED")
+            if getattr(config, "thinking_config", None) is not None and model == "gemini-4-hydrogen":
+                class _BadThinking(Exception):
+                    code = 400
+                    status = "INVALID_ARGUMENT"
+                    message = "thinking_level unsupported"
+                raise _BadThinking("400 INVALID_ARGUMENT")
+            return _resp(text="OK")
+
+    client = SimpleNamespace(models=_FailoverModels())
+    probe = probe_gemini_connection(model="gemini-3.8-flash", client=client)
+    assert probe["ok"] is True
+    assert probe["model"] == "gemini-4-hydrogen"
+
+
+def test_multihop_failover_reaches_third_model_and_rule_turns_do_not_claim_gemini():
+    from travel_agent.llm import probe_gemini_connection
+
+    class _DeadlineErr(Exception):
+        code = 504
+        status = "DEADLINE_EXCEEDED"
+        message = "Deadline expired before operation could complete."
+
+    class _ThirdHopModels:
+        def list(self, *, config=None):
+            return [
+                SimpleNamespace(name="models/gemini-3.8-flash", supported_actions=["generateContent"]),
+                SimpleNamespace(name="models/gemini-4-hydrogen", supported_actions=["generateContent"]),
+                SimpleNamespace(name="models/gemini-3.1-flash-lite", supported_actions=["generateContent"]),
+            ]
+
+        def generate_content(self, *, model, contents, config):
+            if model in {"gemini-3.8-flash", "gemini-4-hydrogen"}:
+                raise _DeadlineErr("504 DEADLINE_EXCEEDED")
+            return _resp(text="OK")
+
+    probe = probe_gemini_connection(model="gemini-3.8-flash", client=SimpleNamespace(models=_ThirdHopModels()))
+    assert probe["ok"] is True and probe["model"] == "gemini-3.1-flash-lite"
+
+    # When deterministic Round-1 Rule Guard handles the turn (e.g., "gặp nhân viên"),
+    # zero Gemini API calls run and llm.backend must truthfully report "rule" (not "gemini 0ms").
+    rule_handled = chat_turn(
+        "Tôi muốn gặp nhân viên hỗ trợ",
+        "U-EMP-002",
+        session_id="g-truthful",
+        llm_backend="gemini",
+        llm_client=_MockGeminiClient([AssertionError("Should not be called")]),
+    )
+    assert rule_handled["route"] == "HANDOFF_STAFF"
+    assert rule_handled["llm"]["backend"] == "rule"

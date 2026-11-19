@@ -18,8 +18,28 @@ DEFAULT_SESSION_TTL_SECONDS = 1800
 
 DEFAULT_LLM_BACKEND = "rule"
 SUPPORTED_LLM_BACKENDS = frozenset({"rule", "gemini"})
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
-DEFAULT_GEMINI_TIMEOUT = 15.0
+DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
+SUPPORTED_GEMINI_MODELS = (
+    "gemini-3.8-flash",
+    "gemini-4-hydrogen",
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-4-neon",
+    "gemini-2.5-flash-lite",
+)
+_GEMINI_MODEL_ALIASES = {
+    "gemini-flash": "gemini-3.8-flash",
+    "gemini-3.8": "gemini-3.8-flash",
+    "gemini-hydrogen": "gemini-4-hydrogen",
+    "4-hydrogen": "gemini-4-hydrogen",
+    "gemini-3.1": "gemini-3.1-flash-lite",
+    "3.1-flash": "gemini-3.1-flash-lite",
+    "gemini-pro": "gemini-2.5-pro",
+}
+DEFAULT_GEMINI_TIMEOUT = 35.0
 
 
 def get_demo_today() -> date:
@@ -46,9 +66,11 @@ def get_gemini_api_key() -> str | None:
 
 
 def get_gemini_model(override: str | None = None) -> str:
-    """Return configured Gemini model identifier."""
+    """Return configured Gemini model identifier, normalizing common shorthand aliases."""
     raw = (override if override is not None else os.environ.get("TRAVEL_AGENT_GEMINI_MODEL", DEFAULT_GEMINI_MODEL)).strip()
-    return raw or DEFAULT_GEMINI_MODEL
+    if not raw:
+        return DEFAULT_GEMINI_MODEL
+    return _GEMINI_MODEL_ALIASES.get(raw.lower(), raw)
 
 
 def get_gemini_timeout() -> float:
@@ -57,7 +79,7 @@ def get_gemini_timeout() -> float:
     if raw:
         try:
             value = float(raw)
-            return max(1.0, min(60.0, value))
+            return max(5.0, min(90.0, value))
         except ValueError:
             pass
     return DEFAULT_GEMINI_TIMEOUT

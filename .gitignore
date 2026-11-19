@@ -3,6 +3,7 @@ venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+pytest-tmp/
 .coverage
 htmlcov/
 .env
@@ -12,7 +13,8 @@ htmlcov/
 dist/
 build/
 data/drafts/*.json
-data/memory/**/*.json
-data/logs/*.csv
+data/memory/
+data/logs/
+*.log
 .DS_Store
 Thumbs.db

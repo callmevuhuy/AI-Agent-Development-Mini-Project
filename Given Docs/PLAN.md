@@ -5,7 +5,7 @@
 | Vấn đề | Lựa chọn hiện tại | Lý do |
 |---|---|---|
 | Ngôn ngữ | Python 3.11 trở lên | Thuận tiện cho mock, JSON Schema và pytest |
-| Planner | Quy tắc xác định; LLM thật chưa triển khai | Test lặp lại được, không cần API key |
+| Planner | Dual-backend: Quy tắc xác định (`rule` mặc định) + Gemini API (`gemini` tùy chọn) | Offline lặp lại được; hỗ trợ NLU & Tool Loop khi bật API |
 | Truy xuất | BM25 ngoại tuyến, lọc category và ACL | Dễ giải thích và kiểm chứng |
 | Lưu trữ | File JSON/CSV cục bộ | Phù hợp nguyên mẫu, dễ xem dữ liệu |
 | Điều phối | Theo phase, mỗi workflow một module | Dễ truy vết điều kiện dừng |
@@ -13,7 +13,7 @@
 
 ## 2. Phần xác định và phần có thể mở rộng bằng LLM
 
-Kiểm tra ID, schema, quyền, tính toán, approval gate, trạng thái, budget, retry, draft và trace phải chạy bằng code ngay cả khi không có LLM. Các việc như nhận diện cách diễn đạt, đề xuất tool, viết lời giải thích và rewrite có thể dùng LLM về sau nhưng vẫn phải qua cùng dispatcher và kiểm tra evidence. Hiện các phần này dùng quy tắc/template.
+Kiểm tra ID, schema, quyền, tính toán, approval gate, trạng thái, budget, retry, draft và trace luôn chạy bằng code xác định ngay cả khi bật LLM. Các việc như nhận diện cách diễn đạt, đề xuất tool/arguments qua Function Calling, viết lại truy vấn RAG và diễn giải câu trả lời được hỗ trợ qua backend tùy chọn ở `src/travel_agent/llm.py` (`RuleBased` mặc định / `Gemini API` khi có `GEMINI_API_KEY`), vẫn đi qua cùng `dispatcher.py` và hậu kiểm citation/approval.
 
 ## 3. Lộ trình mười ngày ban đầu
 

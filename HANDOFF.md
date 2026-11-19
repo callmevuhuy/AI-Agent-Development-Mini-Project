@@ -60,7 +60,14 @@ Bước tiếp theo hoặc thông tin cần bổ sung:
 Commit/push: chỉ thực hiện khi được yêu cầu
 ```
 
-Lịch sử chi tiết ở `CHANGELOG.md`; danh sách công việc và giới hạn ở `TODO.md`.
+Lịch sử chi tiết ở `CHANGELOG.md`; báo cáo kỹ thuật và số liệu đối chiếu ở `Report/report.md`; danh sách công việc và giới hạn ở `TODO.md`.
+
+## Cập nhật bàn giao Hybrid Gemini API (2026-11-19)
+
+- Đã bổ sung `src/travel_agent/llm.py` (`RuleBasedBackend` mặc định, `GeminiBackend` tùy chọn với `GEMINI_API_KEY`) hỗ trợ NLU Structured Output, 1-hop RAG Query Rewrite, Function Calling / Tool-Use Loop qua `dispatcher.py` và Post-Generation Guard `check_generated_response()`.
+- Model mặc định `gemini-3.8-flash` kèm auto-failover qua `gemini-4-hydrogen`, `gemini-3.1-flash-lite`, `gemini-3.5-flash` và danh sách từ `client.models.list()`; dùng `client_args={"timeout": ...}` (không chèn `X-Server-Timeout`) và `HttpRetryOptions(attempts=1)`.
+- Bổ sung `TurnBudget` (`TOTAL_TURN_MAX_STEPS = 32`) cho toàn tin nhắn, `/api/llm/check`, `/api/llm/models`, chỉ báo Online/Offline trên Web Demo, che `AIza...` trong CSV log và đưa `data/audit_events.json` về đúng 2 seed events (`EVT-SEED-001`, `EVT-SEED-002`).
+- Kiểm chứng trước bàn giao: **191/191 pytest**, **62/62 evaluator**, `pip check`, `compileall` và kiểm tra liên kết Markdown đạt; xác minh live thực tế với `gemini-3.1-flash-lite` trên Web Demo (`2,222ms`, `315 tokens`).
 
 ## Cập nhật workspace và phản hồi
 

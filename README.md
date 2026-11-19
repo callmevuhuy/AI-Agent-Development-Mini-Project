@@ -67,8 +67,8 @@ Thiết lập biến môi trường `GEMINI_API_KEY` và chọn backend `gemini`
 $env:GEMINI_API_KEY = "<YOUR_GEMINI_API_KEY>"
 $env:TRAVEL_AGENT_LLM_BACKEND = "gemini"
 # Tùy chọn model và timeout (giá trị mặc định bên dưới):
-$env:TRAVEL_AGENT_GEMINI_MODEL = "gemini-2.5-flash"
-$env:TRAVEL_AGENT_GEMINI_TIMEOUT = "15.0"
+$env:TRAVEL_AGENT_GEMINI_MODEL = "gemini-3.8-flash"
+$env:TRAVEL_AGENT_GEMINI_TIMEOUT = "35.0"
 
 .\.venv\Scripts\python.exe -m travel_agent.app web --host 127.0.0.1 --port 8080
 ```
@@ -78,8 +78,8 @@ $env:TRAVEL_AGENT_GEMINI_TIMEOUT = "15.0"
 ```bash
 export GEMINI_API_KEY="<YOUR_GEMINI_API_KEY>"
 export TRAVEL_AGENT_LLM_BACKEND="gemini"
-export TRAVEL_AGENT_GEMINI_MODEL="gemini-2.5-flash"
-export TRAVEL_AGENT_GEMINI_TIMEOUT="15.0"
+export TRAVEL_AGENT_GEMINI_MODEL="gemini-3.8-flash"
+export TRAVEL_AGENT_GEMINI_TIMEOUT="35.0"
 
 ./.venv/bin/python -m travel_agent.app web --host 127.0.0.1 --port 8080
 ```
@@ -129,8 +129,8 @@ Các lệnh CLI dùng chung cấu hình biến môi trường (`TRAVEL_AGENT_LLM
 | `TRAVEL_AGENT_DEMO_TODAY` | Ngày hệ thống | Ngày tham chiếu định dạng `YYYY-MM-DD` cho truy vấn tương đối |
 | `TRAVEL_AGENT_LLM_BACKEND` | `rule` | Backend xử lý ngôn ngữ: `rule` (ngoại tuyến) hoặc `gemini` (Gemini API) |
 | `GEMINI_API_KEY` | Không đặt | Khóa API Google Gemini; chỉ đọc từ môi trường, không lưu vào trace, audit hoặc CSV |
-| `TRAVEL_AGENT_GEMINI_MODEL` | `gemini-2.5-flash` | Tên model Gemini cho NLU, RAG rewrite, Tool Loop và tổng hợp phản hồi |
-| `TRAVEL_AGENT_GEMINI_TIMEOUT` | `15.0` | Giới hạn thời gian chờ phản hồi API Gemini (giây, trong khoảng `1.0`–`60.0`) |
+| `TRAVEL_AGENT_GEMINI_MODEL` | `gemini-3.8-flash` | Tên model Gemini (`gemini-3.8-flash`, `gemini-4-hydrogen`, `gemini-3.1-flash-lite`, `gemini-3.5-flash`, ...) |
+| `TRAVEL_AGENT_GEMINI_TIMEOUT` | `35.0` | Giới hạn thời gian chờ phản hồi API Gemini (giây, trong khoảng `5.0`–`90.0`) |
 
 Dữ liệu chuyến đi giả lập nằm trong khoảng từ `2026-12-01` đến `2027-01-07`.
 

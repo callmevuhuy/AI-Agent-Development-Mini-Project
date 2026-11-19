@@ -1,5 +1,12 @@
 # Nhật ký thay đổi
 
+## 2026-11-19 — Hoàn thiện tương thích đa model Gemini, báo cáo số liệu & dọn bàn giao
+
+- **Tương thích đa phiên bản Gemini & xử lý `504` ([config.py](src/travel_agent/config.py), [llm.py](src/travel_agent/llm.py)):** Đặt mặc định `gemini-3.8-flash`, hỗ trợ `gemini-4-hydrogen`, `gemini-3.1-flash-lite`, `gemini-3.5-flash` và auto-discovery qua `client.models.list()`; chuyển sang `client_args={"timeout": ...}` (bỏ `X-Server-Timeout`), đặt `HttpRetryOptions(attempts=1)` và `ThinkingLevel.LOW`/`MINIMAL` kèm auto-fallback.
+- **Chuẩn hóa OpenAPI Schema & Web UI Online/Offline ([llm.py](src/travel_agent/llm.py), [web_demo.py](src/travel_agent/web_demo.py), [conversation.py](src/travel_agent/conversation.py)):** Chuyển JSON Schema sang OpenAPI `types.Schema` cho Function Calling & NLU; sửa badge chỉ hiện `Gemini Online` khi thực sự gọi API; thêm `/api/llm/check`, `/api/llm/models` và cảnh báo fallback.
+- **Báo cáo & Dọn bàn giao ([Report/report.md](Report/report.md), [.gitignore](.gitignore)):** Viết lại báo cáo với đầy đủ số liệu đo đạc trước/sau; xóa tệp dư `build_presentation.py` và các file tạm/cache runtime trong `data/`; cập nhật `Given Docs/`, `HANDOFF.md`, `TODO.md`, `README.md`.
+- **Kiểm chứng:** `191/191 pytest`, `62/62 evaluator`, `pip check`, `compileall`, `git diff --check` và xác minh không có liên kết Markdown gãy.
+
 ## 2026-11-19 — Tích hợp Hybrid Gemini API (Phase 1–5) & Pre-Phase 1
 
 - **Pre-Phase 1:** Làm sạch `data/audit_events.json` về 2 bản ghi seed (`EVT-SEED-001`, `EVT-SEED-002`); bổ sung che key Google API (`AIza...`) và token vào `logging_utils.py`; sửa tên `demo/DEMO_WEB.md` và liên kết hỏng trong `README.md`.

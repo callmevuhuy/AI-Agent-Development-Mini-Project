@@ -13,4 +13,4 @@
 | `TEST_MATRIX.md` | Ma trận kiểm thử và tiêu chí đánh giá |
 | `PLAN.md` | Kế hoạch, quyết định thiết kế và trạng thái |
 
-NLU và BM25 chạy bằng quy tắc xác định, không có LLM hay API key bên ngoài. Tất cả hệ thống và hồ sơ nghiệp vụ đều là giả lập. Tài liệu dùng tiếng Việt; định danh kỹ thuật giữ nguyên để đối chiếu mã nguồn.
+Mặc định NLU và BM25 chạy ngoại tuyến bằng quy tắc xác định (`TRAVEL_AGENT_LLM_BACKEND=rule`); hỗ trợ tùy chọn backend Hybrid Gemini API (`src/travel_agent/llm.py`) khi cấu hình `GEMINI_API_KEY`. Tất cả hệ thống và hồ sơ nghiệp vụ đều là giả lập. Tài liệu dùng tiếng Việt; định danh kỹ thuật giữ nguyên để đối chiếu mã nguồn.

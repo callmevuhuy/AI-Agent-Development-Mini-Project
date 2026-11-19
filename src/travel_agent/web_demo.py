@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -9,8 +10,15 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from travel_agent.config import SUPPORTED_LLM_BACKENDS, get_gemini_api_key, get_gemini_model, get_llm_backend
+from travel_agent.config import (
+    SUPPORTED_GEMINI_MODELS,
+    SUPPORTED_LLM_BACKENDS,
+    get_gemini_api_key,
+    get_gemini_model,
+    get_llm_backend,
+)
 from travel_agent.conversation import handle_turn
+from travel_agent.llm import list_available_gemini_models, probe_gemini_connection
 from travel_agent.workspace import draft_detail
 from travel_agent.trip_actions import available_actions, LABELS as TRIP_ACTION_LABELS, action_decision
 from travel_agent.trip_actions import trip_reference
@@ -973,15 +981,32 @@ _HTML = """<!doctype html>
 
     <div>
       <div class="user-box-label">Backend xử lý (LLM)</div>
-      <select id="llm-backend">
+      <select id="llm-backend" onchange="onBackendChange(true)">
         <option value="rule">RuleBased (Offline)</option>
         <option value="gemini">Gemini API (Hybrid Agent)</option>
       </select>
     </div>
 
-    <div class="status-pill">
-      <span class="status-dot"></span>
+    <div id="gemini-model-box">
+      <div class="user-box-label">Model Gemini (gõ hoặc chọn bất kỳ phiên bản)</div>
+      <input id="llm-model" list="llm-model-options" value="gemini-3.8-flash" onchange="onBackendChange(true)" />
+      <datalist id="llm-model-options">
+        <option value="gemini-3.8-flash">gemini-3.8-flash (Mặc định)</option>
+        <option value="gemini-4-hydrogen">gemini-4-hydrogen (Gemini 4 Hydrogen)</option>
+        <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Gemini 3.1 Flash Lite)</option>
+        <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+        <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite</option>
+        <option value="gemini-4-neon">gemini-4-neon</option>
+      </datalist>
+      <button type="button" class="btn-sm" style="width:100%;margin-top:6px" onclick="checkGeminiOnline(true)">Kiểm tra kết nối Online</button>
+    </div>
+
+    <div class="status-pill" id="backend-status-pill">
+      <span class="status-dot" id="backend-status-dot"></span>
       <span id="backend-status-text">Demo offline · Dữ liệu giả lập</span>
+    </div>
+    <div id="llm-mode-hint" style="font-size:11px;line-height:1.4;color:var(--text-muted);margin-top:6px">
+      Chế độ RuleBased dùng quy tắc xác định offline.
     </div>
   </div>
 </aside>
@@ -1011,9 +1036,9 @@ _HTML = """<!doctype html>
         <span>Nền Tối</span>
       </button>
 
-      <div class="meta-chip" id="token-chip" title="Demo chạy offline với dữ liệu giả lập">
-        <span>●</span>
-        <span>Mock data · Offline</span>
+      <div class="meta-chip" id="token-chip" title="Trạng thái chế độ xử lý hiện tại">
+        <span id="header-mode-dot">●</span>
+        <span id="header-mode-text">RuleBased · Offline</span>
       </div>
 
       <!-- Các chức năng Quản trị viên (Chỉ hiển thị với Admin) -->
@@ -1699,8 +1724,10 @@ function appendBotMsg(data) {
   const citationsCount = (data.citations || []).length;
   const stepCount = data.step_count ?? 0;
   const llmInfo = data.llm || {};
+  const isLiveGemini = llmInfo.backend === 'gemini' && !llmInfo.fallback_used;
+  const totalTok = (llmInfo.input_tokens || 0) + (llmInfo.output_tokens || 0);
   const llmLabel = llmInfo.backend === 'gemini'
-    ? (llmInfo.fallback_used ? 'Gemini → Rule fallback' : `Gemini (${Math.round(llmInfo.latency_ms || 0)}ms)`)
+    ? (llmInfo.fallback_used ? 'Gemini → Rule fallback' : `Gemini Online (${Math.round(llmInfo.latency_ms || 0)}ms)`)
     : 'RuleBased';
   const hasError = Boolean(data.error) || route === 'REJECT_SAFETY';
 
@@ -1711,13 +1738,16 @@ function appendBotMsg(data) {
         <span class="step-title">${esc(stepCount)} lượt gọi công cụ</span>
         <span class="step-pill">${esc(uiLabel(route))}</span>
         <span class="badge-status ${hasError ? 'badge-danger' : 'badge-neutral'}" style="font-size:10px">${esc(uiLabel(outcome))}</span>
+        ${isLiveGemini ? `<span class="badge-status" style="font-size:10px;background:rgba(16,185,129,0.18);color:#34d399;border:1px solid rgba(16,185,129,0.4)">✨ Gemini Online · ${esc(llmInfo.model || '')}${totalTok ? ` · ${totalTok} tok` : ''}</span>` : ''}
       </div>
       <button class="step-toggle-btn" onclick="toggleTraceDetails(this)">Xem chi tiết ▾</button>
     </div>
+    ${llmInfo.fallback_used ? `<div style="margin:6px 0 8px;padding:7px 10px;border-radius:8px;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.45);color:#fbbf24;font-size:12px">⚠️ Gemini API không xử lý được lượt này — đã chuyển về RuleBased. Lý do: <code>${esc(llmInfo.fallback_reason || 'unknown')}</code></div>` : ''}
     <div class="step-details-drawer">
       <div><strong>Tuyến xử lý (Route):</strong> ${esc(route)} · <strong>Ý định (Intent):</strong> ${esc(data.intent || 'n/a')}</div>
       ${data.error ? `<div style="color:var(--red)"><strong>Lý do:</strong> ${esc(data.error.message)} <br><strong>Mã lỗi:</strong> ${esc(data.error.code)}</div>` : ''}
       <div><strong>Mã đối tượng:</strong> ${esc(data.record_id || 'n/a')} · <strong>Mã chuyển tiếp (Handoff ID):</strong> ${esc(data.handoff_id || 'none')}</div>
+      ${llmInfo.backend === 'gemini' ? `<div><strong>LLM:</strong> ${esc(llmInfo.model || 'gemini')} · <strong>Tool loop:</strong> ${esc(llmInfo.tool_loop_steps ?? 0)} bước${llmInfo.fallback_used ? ` · <span style="color:var(--red)">Fallback: ${esc(llmInfo.fallback_reason || 'unknown')}</span>` : ''}</div>` : ''}
       ${data.citations && data.citations.length ? `<div><strong>Trích dẫn chính sách:</strong> ${esc(data.citations.join(', '))}</div>` : ''}
     </div>
   `;
@@ -1786,8 +1816,10 @@ async function sendTurn(tripRequest = null) {
   const user_id = document.getElementById('user').value;
   const session_id = document.getElementById('session').value.trim() || ('web-' + user_id);
   const backendEl = document.getElementById('llm-backend');
+  const modelEl = document.getElementById('llm-model');
   const payload = {message, user_id, session_id};
   if (backendEl && backendEl.value) payload.llm_backend = backendEl.value;
+  if (modelEl && modelEl.value && payload.llm_backend === 'gemini') payload.llm_model = modelEl.value;
   const generation = userGeneration;
 
   if (currentRole() === 'Approver') {
@@ -1801,8 +1833,8 @@ async function sendTurn(tripRequest = null) {
   // Bắt đầu animation typing
   const stopTyping = showTypingIndicator();
 
-  // Độ trễ ẩn mô phỏng 3-6s
-  const delayMs = Math.floor(Math.random() * (6000 - 3000 + 1)) + 3000;
+  // Chỉ giữ độ trễ mô phỏng cho RuleBased; Gemini API chạy thật theo độ trễ mạng
+  const delayMs = payload.llm_backend === 'gemini' ? 0 : (Math.floor(Math.random() * (6000 - 3000 + 1)) + 3000);
 
   try {
     const [fetchRes] = await Promise.all([
@@ -2131,17 +2163,149 @@ function filterAuditTable() {
   renderAuditTable(filtered);
 }
 
+let llmInitialized = false;
+let geminiConfigured = false;
+let lastProbeResult = null;
+
+function updateLlmModeUI() {
+  const backendEl = document.getElementById('llm-backend');
+  const modelEl = document.getElementById('llm-model');
+  const modelBox = document.getElementById('gemini-model-box');
+  const statusText = document.getElementById('backend-status-text');
+  const statusDot = document.getElementById('backend-status-dot');
+  const headerChip = document.getElementById('token-chip');
+  const headerDot = document.getElementById('header-mode-dot');
+  const headerText = document.getElementById('header-mode-text');
+  const hint = document.getElementById('llm-mode-hint');
+  if (!backendEl) return;
+
+  const isGemini = backendEl.value === 'gemini';
+  const modelName = modelEl && modelEl.value ? modelEl.value.trim() : 'gemini-3.8-flash';
+  if (modelBox) modelBox.classList.toggle('hidden', !isGemini);
+
+  if (!isGemini) {
+    if (statusDot) statusDot.style.background = '#94a3b8';
+    if (statusText) statusText.textContent = 'RuleBased · Offline';
+    if (headerDot) headerDot.style.color = '#94a3b8';
+    if (headerText) headerText.textContent = 'RuleBased · Offline';
+    if (headerChip) headerChip.style.borderColor = '';
+    if (hint) hint.textContent = 'Chế độ RuleBased dùng quy tắc xác định offline; từ chối tự nhiên ngoài từ điển hoặc đại từ tiếng Việt có thể trả CLARIFY.';
+    return;
+  }
+
+  if (!geminiConfigured) {
+    if (statusDot) statusDot.style.background = '#f59e0b';
+    if (statusText) statusText.textContent = 'Chưa cấu hình GEMINI_API_KEY';
+    if (headerDot) headerDot.style.color = '#f59e0b';
+    if (headerText) headerText.textContent = 'Gemini Offline · Thiếu API key';
+    if (headerChip) headerChip.style.borderColor = 'rgba(245,158,11,0.5)';
+    if (hint) hint.textContent = 'Thiếu GEMINI_API_KEY nên mọi lượt sẽ tự fallback về RuleBased.';
+    return;
+  }
+
+  if (lastProbeResult && lastProbeResult.model === modelName) {
+    if (lastProbeResult.online) {
+      if (statusDot) statusDot.style.background = '#34d399';
+      if (statusText) statusText.textContent = `Online · ${modelName} (${Math.round(lastProbeResult.latency_ms)}ms)`;
+      if (headerDot) headerDot.style.color = '#34d399';
+      if (headerText) headerText.textContent = `Gemini API · Online (${modelName})`;
+      if (headerChip) headerChip.style.borderColor = 'rgba(16,185,129,0.55)';
+      if (hint) hint.textContent = 'Đang kết nối Gemini thật: hiểu tiếng Việt/đại từ nối ngữ cảnh, viết lại truy vấn chính sách 1-hop, tự đề xuất tool qua dispatcher và tổng hợp câu trả lời tự nhiên kèm trích dẫn.';
+    } else {
+      if (statusDot) statusDot.style.background = '#f87171';
+      if (statusText) statusText.textContent = `Lỗi Gemini: ${lastProbeResult.error || 'unavailable'}`;
+      if (headerDot) headerDot.style.color = '#f87171';
+      if (headerText) headerText.textContent = 'Gemini Offline · Lỗi kết nối';
+      if (headerChip) headerChip.style.borderColor = 'rgba(239,68,68,0.55)';
+      if (hint) hint.textContent = `Không kết nối được model ${modelName} (${lastProbeResult.error || 'error'}). Hệ thống sẽ tự fallback về RuleBased cho tới khi đổi model/key hợp lệ.`;
+    }
+  } else {
+    if (statusDot) statusDot.style.background = '#60a5fa';
+    if (statusText) statusText.textContent = `Đã chọn ${modelName} · Đang kiểm tra...`;
+    if (headerDot) headerDot.style.color = '#60a5fa';
+    if (headerText) headerText.textContent = `Gemini API · Đang kiểm tra (${modelName})`;
+  }
+}
+
+async function refreshGeminiModelOptions() {
+  const listEl = document.getElementById('llm-model-options');
+  if (!listEl) return;
+  try {
+    const res = await fetch('/api/llm/models');
+    if (!res.ok) return;
+    const payload = await res.json();
+    const models = payload.models || [];
+    if (models.length) {
+      listEl.innerHTML = models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+    }
+  } catch {}
+}
+
+async function checkGeminiOnline(announce = false) {
+  const modelEl = document.getElementById('llm-model');
+  const modelName = modelEl && modelEl.value ? modelEl.value.trim() : 'gemini-3.8-flash';
+  const statusText = document.getElementById('backend-status-text');
+  if (statusText) statusText.textContent = `Đang ping ${modelName}...`;
+  try {
+    const res = await fetch('/api/llm/check?model=' + encodeURIComponent(modelName));
+    const probe = await res.json();
+    lastProbeResult = probe;
+    if (probe.online && probe.model && modelEl) {
+      modelEl.value = probe.model;
+    }
+    updateLlmModeUI();
+    if (announce) {
+      if (probe.online) {
+        appendSystemMsg(`<span style="color:#34d399">✅ Kết nối Gemini API thành công: <strong>${esc(probe.model)}</strong> (${Math.round(probe.latency_ms)}ms). Hệ thống đang ở chế độ Online (Hybrid Agent) và sẽ tạo phản hồi tự nhiên/tool-loop thay cho RuleBased.</span>`);
+      } else {
+        const avail = (probe.available_models || []).length ? `<br>Model khả dụng gợi ý: <code>${esc(probe.available_models.join(', '))}</code>` : '';
+        appendSystemMsg(`<span style="color:var(--red)">❌ Không gọi được Gemini API (<strong>${esc(probe.model)}</strong>): <code>${esc(probe.error || 'unavailable')}</code>.${avail}<br>Các lượt chat sẽ tạm fallback về RuleBased.</span>`);
+      }
+    }
+  } catch {
+    lastProbeResult = {online: false, model: modelName, error: 'network_error'};
+    updateLlmModeUI();
+  }
+}
+
+function onBackendChange(announce = false) {
+  const backendEl = document.getElementById('llm-backend');
+  lastProbeResult = null;
+  updateLlmModeUI();
+  if (backendEl && backendEl.value === 'gemini' && geminiConfigured) {
+    checkGeminiOnline(announce);
+  } else if (announce && backendEl) {
+    appendSystemMsg(backendEl.value === 'rule'
+      ? 'Đã chuyển sang chế độ <strong>RuleBased (Offline)</strong>.'
+      : '<span style="color:var(--amber)">Đã chọn Gemini API nhưng server chưa có GEMINI_API_KEY.</span>');
+  }
+}
+
 // Trình kiểm tra Bộ nhớ & Vết thực thi
 async function refreshInspector() {
   await fetchPanel('/api/state', data => {
     const adminNotice = 'Admin không có quyền truy cập bộ nhớ cá nhân. Hãy chọn Employee, Reviewer hoặc Approver để xem bộ nhớ của tài khoản đó.';
     document.getElementById('mem-session-box').textContent = currentRole() === 'Admin' ? adminNotice : JSON.stringify(data.session || {}, null, 2);
     document.getElementById('mem-pref-box').textContent = currentRole() === 'Admin' ? adminNotice : JSON.stringify(data.preferences || {}, null, 2);
-    const statusText = document.getElementById('backend-status-text');
-    if (statusText && data.llm) {
-      statusText.textContent = data.llm.gemini_configured
-        ? `Hybrid sẵn sàng · ${data.llm.model}`
-        : 'Demo offline · Chưa cấu hình GEMINI_API_KEY';
+    if (data.llm) {
+      geminiConfigured = Boolean(data.llm.gemini_configured);
+      const backendEl = document.getElementById('llm-backend');
+      const modelEl = document.getElementById('llm-model');
+      if (modelEl && data.llm.model && !llmInitialized) {
+        modelEl.value = data.llm.model;
+      }
+      if (!llmInitialized && backendEl && data.llm.default_backend) {
+        backendEl.value = data.llm.default_backend;
+      }
+      const firstInit = !llmInitialized;
+      llmInitialized = true;
+      updateLlmModeUI();
+      if (firstInit && geminiConfigured) {
+        refreshGeminiModelOptions();
+      }
+      if (firstInit && backendEl && backendEl.value === 'gemini' && geminiConfigured) {
+        checkGeminiOnline(false);
+      }
     }
   }, message => {
     document.getElementById('mem-session-box').textContent = message;
@@ -2343,6 +2507,17 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 self.end_headers()
                 self.wfile.write(body)
                 return
+            if parsed.path == "/api/llm/models":
+                self._send_json(HTTPStatus.OK, {"models": list_available_gemini_models()})
+                return
+            if parsed.path == "/api/llm/check":
+                qs = parse_qs(parsed.query)
+                req_model = qs.get("model", [None])[0]
+                if req_model is not None and not re.fullmatch(r"[A-Za-z0-9._-]{3,80}", req_model):
+                    self._send_error(HTTPStatus.BAD_REQUEST, "invalid_argument", "Tên model Gemini không hợp lệ.")
+                    return
+                self._send_json(HTTPStatus.OK, probe_gemini_connection(model=req_model))
+                return
             if parsed.path == "/api/state":
                 qs = parse_qs(parsed.query)
                 user_id = qs.get("user_id", [""])[0]
@@ -2458,6 +2633,10 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 if llm_backend is not None and (not isinstance(llm_backend, str) or llm_backend.strip().lower() not in SUPPORTED_LLM_BACKENDS):
                     self._send_error(HTTPStatus.BAD_REQUEST, "invalid_argument", "Backend xử lý không hợp lệ. Chỉ hỗ trợ 'rule' hoặc 'gemini'.")
                     return
+                llm_model = payload.get("llm_model")
+                if llm_model is not None and (not isinstance(llm_model, str) or not re.fullmatch(r"[A-Za-z0-9._-]{3,80}", llm_model.strip())):
+                    self._send_error(HTTPStatus.BAD_REQUEST, "invalid_argument", "Tên model Gemini không hợp lệ.")
+                    return
                 result = handle_turn(
                     payload.get("message", ""),
                     payload.get("user_id", ""),
@@ -2466,6 +2645,7 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                     trip_action=payload.get('action') if parsed.path == '/api/trip/action' else None,
                     action_trip_id=payload.get('trip_id') if parsed.path == '/api/trip/action' else None,
                     llm_backend=llm_backend,
+                    llm_model=llm_model,
                 )
             except ValueError as exc:
                 self._send_error(HTTPStatus.BAD_REQUEST, "invalid_argument", "Không thể xử lý yêu cầu. Hãy kiểm tra tài khoản, mã phiên và phạm vi phê duyệt.")

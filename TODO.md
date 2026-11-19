@@ -18,7 +18,7 @@
 
 ## Xác minh
 
-Lần kiểm tra mới nhất trên nhánh `team-main` (2026-11-19): **186/186 test pytest đạt** (gồm 180 ca nền, HTTP thật, 2 Node.js UI smoke tests và 6 ca kiểm thử Gemini mock/guard/tool-loop); **62/62 ca evaluation đạt**, không có hồi quy trên tập ca đã lưu. `compileall`, `pip check` và kiểm tra liên kết Markdown không phát hiện lỗi.
+Lần kiểm tra mới nhất trên nhánh `team-main` (2026-11-19): **191/191 test pytest đạt** (gồm 180 ca nền, HTTP thật, 2 Node.js UI smoke tests và 11 ca kiểm thử Gemini mock/schema/failover/guard/tool-loop); **62/62 ca evaluation đạt**, không có hồi quy trên tập ca đã lưu. `compileall`, `pip check` và kiểm tra liên kết Markdown không phát hiện lỗi.
 
 Chạy các lệnh trong `README.md`; xem kết quả mới nhất ở `eval/reports/after.md` và `eval/reports/regression.md`. Số lượng test được xác định bởi pytest lúc chạy. Các mốc lịch sử (53 test ngày 2026-11-16, 69/96/109 test ngày 2026-11-17, 150/169/180 test ngày 2026-11-18) chỉ mang tính đối chiếu.
 
@@ -37,7 +37,7 @@ Mục tiêu: nâng cấp project thành **Hybrid AI Agent** dùng Gemini API (`g
 ### Phase 1 — Chuẩn bị SDK/Config, Tầng NLU Structured Output & Budget/Timeout
 
 - [x] Bổ sung dependency `google-genai` vào `requirements.txt` / `pyproject.toml`.
-- [x] Thêm cấu hình vào `src/travel_agent/config.py`: `TRAVEL_AGENT_LLM_BACKEND` (`rule` | `gemini`), `GEMINI_API_KEY` (chỉ đọc từ env, không ghi vào trace/audit/CSV), `TRAVEL_AGENT_GEMINI_MODEL` (mặc định `gemini-2.5-flash`), `TRAVEL_AGENT_GEMINI_TIMEOUT`, và ngân sách bước tổng cho mỗi tin nhắn (`TOTAL_TURN_MAX_STEPS` / `TurnBudget`).
+- [x] Thêm cấu hình vào `src/travel_agent/config.py`: `TRAVEL_AGENT_LLM_BACKEND` (`rule` | `gemini`), `GEMINI_API_KEY` (chỉ đọc từ env, không ghi vào trace/audit/CSV), `TRAVEL_AGENT_GEMINI_MODEL` (mặc định `gemini-3.8-flash`, hỗ trợ auto-discovery khi model cũ 404), `TRAVEL_AGENT_GEMINI_TIMEOUT`, và ngân sách bước tổng cho mỗi tin nhắn (`TOTAL_TURN_MAX_STEPS` / `TurnBudget`).
 - [x] Tạo `src/travel_agent/llm.py` với interface thống nhất (`RuleBasedBackend` + `GeminiBackend`) và adapter sạch tách khỏi `_single_turn()` trong `conversation.py`.
 - [x] Chạy lớp guard vòng 1 của `nlu.py` (`_SAFETY_PATTERNS`, malformed ID) trước khi gọi Gemini; dùng Gemini Structured Output (`response_mime_type="application/json"` + `response_json_schema`) để trích xuất `RouteDecision` cho câu tự nhiên, tiếng Việt có dấu/đại từ và ý định đa nghĩa.
 - [x] Cài đặt fallback tự động về `nlu.route_message_intent()` hoặc `HANDOFF_STAFF` khi Gemini API lỗi, timeout hoặc `429`.

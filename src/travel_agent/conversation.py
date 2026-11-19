@@ -140,7 +140,7 @@ def _run_aux_tool(
 def _merge_llm_meta(base: LLMCallMeta, extra: LLMCallMeta) -> LLMCallMeta:
     if extra.backend == "gemini":
         base.backend = "gemini"
-    if extra.model and not base.model:
+    if extra.model:
         base.model = extra.model
     base.latency_ms += extra.latency_ms
     base.input_tokens += extra.input_tokens
@@ -953,6 +953,7 @@ def _single_turn(
     action_trip_id: str | None = None,
     budget: TurnBudget | None = None,
     llm_backend: str | None = None,
+    llm_model: str | None = None,
     llm_client: Any | None = None,
     use_tool_loop: bool = True,
 ) -> dict[str, Any]:
@@ -962,8 +963,8 @@ def _single_turn(
         raise ValueError("Không tìm thấy tài khoản demo. Hãy chọn một người dùng trong danh sách.")
 
     budget = budget or TurnBudget()
-    backend = get_backend(llm_backend, client=llm_client)
-    llm_meta = LLMCallMeta(backend=backend.name, model=getattr(backend, "model", None))
+    backend = get_backend(llm_backend, model=llm_model, client=llm_client)
+    llm_meta = LLMCallMeta(backend="rule")
     user_context = {"user_id": user["user_id"], "role": user["role"], "session_id": session_id}
     output_format = "concise"
     session_snapshot: dict[str, Any] = {}
@@ -1570,8 +1571,8 @@ def _trip_references(state, result, scope):
 
 
 def handle_turn(message, user_id, *, session_id='demo-session', approval_scope=None,
-                trip_action=None, action_trip_id=None, llm_backend=None, llm_client=None,
-                use_tool_loop=True):
+                trip_action=None, action_trip_id=None, llm_backend=None, llm_model=None,
+                llm_client=None, use_tool_loop=True):
     """Xử lý tối đa bốn yêu cầu độc lập, mỗi yêu cầu giữ quyền, budget chung và kết quả riêng."""
     budget = TurnBudget()
     # Kiểm tra injection trên cả tin nhắn trước khi chạy bất kỳ nhánh nào.
@@ -1581,8 +1582,8 @@ def handle_turn(message, user_id, *, session_id='demo-session', approval_scope=N
     if trip_action is not None or unsafe or len(parts) < 2:
         return _single_turn(message, user_id, session_id=session_id, approval_scope=approval_scope,
                             trip_action=trip_action, action_trip_id=action_trip_id,
-                            budget=budget, llm_backend=llm_backend, llm_client=llm_client,
-                            use_tool_loop=use_tool_loop)
+                            budget=budget, llm_backend=llm_backend, llm_model=llm_model,
+                            llm_client=llm_client, use_tool_loop=use_tool_loop)
     if len(parts) > 4:
         return {'route':'CLARIFY','intent':'multiple_requests','outcome':'needs_input',
                 'bot_response':'Hãy gửi tối đa 4 yêu cầu trong một tin nhắn, tách bằng dấu chấm phẩy.',
@@ -1592,8 +1593,8 @@ def handle_turn(message, user_id, *, session_id='demo-session', approval_scope=N
                 'total_step_budget':{'used':0, 'max':budget.max_total_steps}}
     responses = [
         _single_turn(p, user_id, session_id=session_id, approval_scope=approval_scope,
-                     budget=budget, llm_backend=llm_backend, llm_client=llm_client,
-                     use_tool_loop=use_tool_loop)
+                     budget=budget, llm_backend=llm_backend, llm_model=llm_model,
+                     llm_client=llm_client, use_tool_loop=use_tool_loop)
         for p in parts
     ]
     outcomes = {r['outcome'] for r in responses}
