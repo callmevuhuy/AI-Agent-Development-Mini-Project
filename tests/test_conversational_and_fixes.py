@@ -242,6 +242,11 @@ def test_long_term_preference_formats_response_and_strict_handoff_logs_utf8_csv(
     assert len(history) >= 4
     assert any("[REDACTED_NUMBER]" in row["user_message"] for row in history)
 
+    gemini_leak = chat_turn("Check TRIP-2026-006 with AIzaSyDemoGeminiSecretKey1234567890", "U-EMP-002", session_id="hnd-s2")
+    assert gemini_leak["route"] == "SELF_SERVE"
+    history = read_chat_history()
+    assert any("[REDACTED_SECRET]" in row["user_message"] and "AIzaSyDemo" not in row["user_message"] for row in history)
+
     handoffs = read_handoff_queue(status="open")
     assert len(handoffs) == 1
 

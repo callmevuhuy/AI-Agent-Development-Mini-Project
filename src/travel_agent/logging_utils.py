@@ -16,7 +16,10 @@ LOG_DIR = _DEFAULT_LOG_DIR
 _LOG_LOCK = Lock()
 
 _CARD_LIKE = re.compile(r"\b(?:\d[ -]*?){13,19}\b")
-_SECRET_LIKE = re.compile(r"\b(?:sk-[A-Za-z0-9]{10,}|Bearer\s+[A-Za-z0-9._-]{10,})\b", re.IGNORECASE)
+_SECRET_LIKE = re.compile(
+    r"\b(?:AIza[0-9A-Za-z_-]{20,}|sk-[A-Za-z0-9_-]{10,}|gh[pousr]_[A-Za-z0-9]{20,}|Bearer\s+[A-Za-z0-9._-]{10,})\b",
+    re.IGNORECASE,
+)
 
 CHAT_COLUMNS = [
     "timestamp_utc",

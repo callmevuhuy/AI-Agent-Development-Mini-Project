@@ -1,6 +1,6 @@
 # Trợ lý điều hành công tác doanh nghiệp
 
-Kịch bản trình bày ba workflow và quyền các role: [Demo cho giáo viên](demo/DEMO_GIAO_VIEN.md).
+Kịch bản trình bày ba workflow và quyền các role: [Kịch bản demo web](demo/DEMO_WEB.md).
 
 Chat hỗ trợ tối đa bốn yêu cầu trong một tin nhắn, tách bằng dấu chấm phẩy, xuống dòng hoặc liên từ trước một yêu cầu tường minh. Giao diện hiện từng kết quả riêng, giữ lỗi/quyền/outcome của từng phần; đây là các thao tác tuần tự, không phải giao dịch nguyên tử. Injection được kiểm tra trên cả tin nhắn trước khi thực hiện. Mỗi phần giữ budget/retry của lượt riêng.
 
@@ -78,7 +78,7 @@ Nếu cổng 8080 đang được dùng hoặc báo `WinError 10048`, dừng phi�
 .\.venv\Scripts\python.exe -m travel_agent.app web --host 127.0.0.1 --port 8081
 ```
 
-Khi đó mở [http://127.0.0.1:8081](http://127.0.0.1:8081). Giao diện có Chat, Trips, Drafts, Handoff, Audit log và Memory & Trace. Tài khoản được chọn từ dữ liệu giả lập, chưa phải đăng nhập production. Kịch bản trình diễn: [Demo cho giáo viên](demo/DEMO_GIAO_VIEN.md).
+Khi đó mở [http://127.0.0.1:8081](http://127.0.0.1:8081). Giao diện có Chat, Trips, Drafts, Handoff, Audit log và Memory & Trace. Tài khoản được chọn từ dữ liệu giả lập, chưa phải đăng nhập production. Kịch bản trình diễn: [Kịch bản demo web](demo/DEMO_WEB.md).
 
 ### Xử lý lỗi môi trường
 
@@ -205,7 +205,7 @@ Xem [kịch bản demo](demo/DEMO_SCENARIOS.md), [ma trận kiểm thử](Given%
 | 14.1 Mã nguồn | `src/travel_agent/` |
 | 14.2 Cài đặt và chạy | Tài liệu này |
 | 14.3 Dữ liệu và kho chính sách | `data/` |
-| 14.4 Hợp đồng agent, tool và schema | `Given Docs/AGENTS.md`, `Given Docs/TOOL_CARDS.md`, `schemas/` |
+| 14.4 Hợp đồng agent, tool và schema | `Given Docs/AGENTS.md`, `Given Docs/TOOL_CARDS.md`, `src/travel_agent/schemas/` |
 | 14.5 Kiến trúc và ba quy trình | `Given Docs/ARCHITECTURE.md` |
 | 14.6 Memory và ranh giới dữ liệu | `Given Docs/MEMORY_AND_SAFETY.md` |
 | 14.7 Test và phân tích lỗi | `Given Docs/TEST_MATRIX.md`, `eval/reports/root_cause.md` |

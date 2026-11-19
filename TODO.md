@@ -18,11 +18,51 @@
 
 ## Xác minh
 
-Lần kiểm tra ngày 2026-11-17: **109/109 test pytest đạt**, bao gồm test HTTP thật; **62/62 ca evaluation đạt**, không có hồi quy trên tập ca đã lưu. `compileall` và kiểm tra diff không phát hiện lỗi.
+Lần kiểm tra mới nhất trên nhánh `team-main` (2026-11-19): **180/180 test pytest đạt** (gồm test HTTP thật và 2 Node.js UI smoke tests); **62/62 ca evaluation đạt**, không có hồi quy trên tập ca đã lưu. `compileall` và kiểm tra liên kết Markdown không phát hiện lỗi.
 
-Chạy các lệnh trong `README.md`; xem kết quả mới nhất ở `eval/reports/after.md` và `eval/reports/regression.md`. Số lượng test được xác định bởi pytest lúc chạy. Mốc 2026-11-16 có 53 test; mốc trước đợt rà soát này có 69 test. Các số lịch sử không thay thế kết quả kiểm tra hiện tại.
+Chạy các lệnh trong `README.md`; xem kết quả mới nhất ở `eval/reports/after.md` và `eval/reports/regression.md`. Số lượng test được xác định bởi pytest lúc chạy. Các mốc lịch sử (53 test ngày 2026-11-16, 69/96/109 test ngày 2026-11-17, 150/169/180 test ngày 2026-11-18) chỉ mang tính đối chiếu.
 
 Evaluator có 62 ca xác định, gồm nguyên 31 prompt web. Baseline là lần đo đầu tiên sau khi triển khai, không phải số đo trước khi dự án tồn tại; không suy diễn thành mức cải thiện lịch sử.
+
+## Kế hoạch mở rộng — Tích hợp Gemini API
+
+Mục tiêu: nâng cấp project thành **Hybrid AI Agent** dùng Gemini API (`google-genai`) theo kiến trúc dual-backend (`RuleBased` mặc định cho offline/CI, `Gemini` tùy chọn qua biến môi trường), giữ nguyên 100% lớp kiểm soát tất định (`dispatcher.py`, `registry.py`, `calculate_expense_summary.py`, `validate_trip_requirements.py`, approval gate và strict `HANDOFF_STAFF` template).
+
+### Pre-Phase 1 — Chuẩn bị & dọn nền (Đã hoàn thành trên `team-main`)
+
+- [x] Dọn `data/audit_events.json` về đúng 2 bản ghi seed gốc (`EVT-SEED-001`, `EVT-SEED-002`), loại bỏ dữ liệu demo/test chạy thử bị commit nhầm.
+- [x] Bổ sung che Google Gemini API key (`AIza...`) và token (`sk-...`, `ghp_...`, `Bearer ...`) vào `_SECRET_LIKE` trong `src/travel_agent/logging_utils.py` kèm test hồi quy.
+- [x] Rà soát và đồng bộ tài liệu/liên kết: đổi tên `demo/DEMO_WEBmd` -> `demo/DEMO_WEB.md`, sửa liên kết hỏng trong `README.md` (`demo/DEMO_WEB.md`, `src/travel_agent/schemas/`) và đồng bộ `TODO.md`.
+
+### Phase 1 — Chuẩn bị SDK/Config, Tầng NLU Structured Output & Budget/Timeout
+
+- [ ] Bổ sung dependency `google-genai` vào `requirements.txt` / `pyproject.toml`.
+- [ ] Thêm cấu hình vào `src/travel_agent/config.py`: `TRAVEL_AGENT_LLM_BACKEND` (`rule` | `gemini`), `GEMINI_API_KEY` (chỉ đọc từ env, không ghi vào trace/audit/CSV), `TRAVEL_AGENT_GEMINI_MODEL` (mặc định `gemini-2.5-flash`), `TRAVEL_AGENT_GEMINI_TIMEOUT`, và ngân sách bước tổng cho mỗi tin nhắn (`handle_turn`).
+- [ ] Tạo `src/travel_agent/llm.py` với interface thống nhất (`RuleBasedBackend` + `GeminiBackend`) và adapter sạch tách khỏi `_single_turn()` trong `conversation.py`.
+- [ ] Chạy lớp guard vòng 1 của `nlu.py` (`_SAFETY_PATTERNS`, malformed ID) trước khi gọi Gemini; dùng Gemini Structured Output (`response_mime_type="application/json"` + `response_schema`) để trích xuất `RouteDecision` cho câu tự nhiên, tiếng Việt có dấu/đại từ và ý định đa nghĩa.
+- [ ] Cài đặt fallback tự động về `nlu.route_message_intent()` hoặc `HANDOFF_STAFF` khi Gemini API lỗi, timeout hoặc `429`.
+
+### Phase 2 — RAG 1-Hop Query Rewrite & Grounded Narrative (có Hậu kiểm)
+
+- [ ] Mở rộng 1-hop Query Rewrite (`<= 1` lần, `<= 200` ký tự, ghi `transition="query_rewrite"` vào `trace`) bằng Gemini khi `search_travel_policy` trả `no_result: true` hoặc truy vấn tiếng Việt ngoài từ điển cố định.
+- [ ] Cho phép Gemini viết lại câu trả lời tự nhiên ở tuyến `SELF_SERVE` dựa trên JSON verified facts và citations; giữ nguyên template cứng cho `HANDOFF_STAFF`, `CLARIFY`, `REJECT_SAFETY`.
+- [ ] Xây dựng Post-Generation Guard: kiểm tra giữ đủ citation và chặn khẳng định `"approved"` khi `trip_approval_status != "approved"`, tự fallback về formatter deterministic nếu vi phạm.
+
+### Phase 3 — Gemini Function Calling / Agent Tool-Use Loop (theo góp ý `Report/report.md`)
+
+- [ ] Cho phép Gemini đề xuất tên tool và arguments từ `registry.py` qua `dispatcher.py` (application vẫn cấp `user_context`, kiểm tra RBAC/scope/JSON Schema và quyết định bước dừng).
+- [ ] Ghi đầy đủ vết đề xuất tool của model, kết quả `dispatcher`, observation và quyết định bước tiếp theo trong `RunState.trace`, bị giới hạn bởi tổng budget toàn tin nhắn và timeout.
+
+### Phase 4 — Testing (Mocked + Live) & Evaluation
+
+- [ ] Giữ nguyên toàn bộ `pytest` và 62 ca `eval/run_eval.py` chạy mặc định với `TRAVEL_AGENT_LLM_BACKEND=rule` (offline, miễn phí, repeatable).
+- [ ] Tạo `tests/test_llm_gemini.py` dùng Mock Gemini Client kiểm chứng: JSON NLU parsing, timeout/`429` fallback, 1-hop query rewrite, tool-use loop qua `dispatcher`, Post-Generation Guard và injection resistance.
+- [ ] Tạo `eval/run_eval_llm.py` (chạy thủ công khi có `GEMINI_API_KEY`) trên tập câu độc lập (paraphrase, tiếng Việt tự nhiên, phủ định, missing info, injection) và ghi nhận latency/token thực tế.
+
+### Phase 5 — Cập nhật Web Demo UI & Tài liệu
+
+- [ ] Bổ sung badge/nút chuyển backend (`RuleBased` vs `Gemini`) trên `src/travel_agent/web_demo.py` kèm hiển thị `latency_ms` và `query_rewrite` trong tab `Memory & Trace`.
+- [ ] Cập nhật `README.md`, `Given Docs/PLAN.md`, `Report/report.md` và `CHANGELOG.md` sau khi hoàn thành tích hợp.
 
 ## Chỉ cần khi mở rộng dự án
 
