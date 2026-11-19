@@ -24,6 +24,31 @@
 
 Baseline là lần đo số liệu đầu tiên sau khi các tính năng đã được triển khai; không có benchmark lịch sử trước thay đổi. Evaluation là deterministic mock suite, không phải benchmark chất lượng LLM quy mô lớn.
 
+## Kế hoạch mở rộng tiếp theo — Tích hợp Gemini API (Phase 1, 2, 4, 5)
+
+Mục tiêu: nâng cấp project thành **Hybrid AI Agent** dùng Gemini API (`google-genai`) theo kiến trúc dual-backend (`RuleBased` mặc định cho offline/CI, `Gemini` tùy chọn qua biến môi trường), vẫn giữ nguyên 100% lớp kiểm soát tất định (`dispatcher.py`, `calculate_expense_summary.py`, `validate_trip_requirements.py`, và strict `HANDOFF_STAFF` template). *(Tạm bỏ qua Phase 3 — Full ReAct Tool-Calling Loop).*
+
+### Phase 1 — Chuẩn bị SDK/Config & Tầng NLU Structured Output (`llm.py`)
+- [ ] Bổ sung dependency `google-genai` vào `requirements.txt` / `pyproject.toml`.
+- [ ] Thêm cấu hình vào `src/travel_agent/config.py`: `TRAVEL_AGENT_LLM_BACKEND` (`rule` | `gemini`), `GEMINI_API_KEY` (chỉ đọc từ env, không ghi vào trace/audit/CSV), `TRAVEL_AGENT_GEMINI_MODEL` (mặc định `gemini-2.5-flash`), `TRAVEL_AGENT_GEMINI_TIMEOUT`.
+- [ ] Tạo `src/travel_agent/llm.py` với interface thống nhất (`RuleBasedBackend` + `GeminiBackend`).
+- [ ] Chạy lớp guard vòng 1 của `nlu.py` (`_SAFETY_PATTERNS`, malformed ID) trước khi gọi Gemini; dùng Gemini Structured Output (`response_mime_type="application/json"` + `response_schema`) để trích xuất `RouteDecision` cho các câu tự nhiên phức tạp, lóng hoặc đa nghĩa.
+- [ ] Cài đặt fallback tự động về `nlu.route_message_intent()` hoặc `HANDOFF_STAFF` khi Gemini API lỗi, timeout hoặc `429`.
+
+### Phase 2 — RAG 1-Hop Query Rewrite & Grounded Narrative (có Hậu kiểm)
+- [ ] Tích hợp 1-hop Query Rewrite (`<= 1` lần, `<= 200` ký tự, ghi `transition="query_rewrite"` vào `trace`) khi `search_travel_policy` trả `no_result: true`.
+- [ ] Chỉ cho phép Gemini viết lại câu trả lời tự nhiên ở tuyến `SELF_SERVE` dựa trên JSON verified facts và citations; giữ nguyên template cứng cho `HANDOFF_STAFF`, `CLARIFY`, `REJECT_SAFETY`.
+- [ ] Xây dựng Post-Generation Guard: kiểm tra giữ đủ citation và chặn khẳng định `"approved"` khi `trip_approval_status != "approved"`, tự fallback về formatter deterministic nếu vi phạm.
+
+### Phase 4 — Testing (Mocked + Live) & Evaluation
+- [ ] Giữ nguyên 53 pytest và 31 eval cases chạy mặc định với `TRAVEL_AGENT_LLM_BACKEND=rule` (offline, miễn phí, repeatable).
+- [ ] Tạo `tests/test_llm_gemini.py` dùng Mock Gemini Client kiểm chứng: JSON NLU parsing, timeout/`429` fallback, 1-hop query rewrite, Post-Generation Guard và injection resistance.
+- [ ] Tạo `eval/run_eval_llm.py` (chạy thủ công khi có `GEMINI_API_KEY`) để đo latency, token cost và tỷ lệ pass trên các câu paraphrase khó.
+
+### Phase 5 — Cập nhật Web Demo UI & Tài liệu
+- [ ] Bổ sung badge/nút chuyển backend (`RuleBased` vs `Gemini`) trên [web_demo.py](src/travel_agent/web_demo.py) kèm hiển thị `latency_ms` và `query_rewrite` trong tab `Trace & Memory`.
+- [ ] Cập nhật `README.md`, `Given Docs/PLAN.md` và `CHANGELOG.md` sau khi hoàn thành tích hợp.
+
 ## Ngoài phạm vi hiện tại (chỉ cần nếu project mở rộng)
 
 - Semantic entailment/NLI để bổ sung hoặc thay lexical grounding baseline.
