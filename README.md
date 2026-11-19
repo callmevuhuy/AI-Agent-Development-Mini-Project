@@ -8,42 +8,87 @@ Phản hồi workflow/handoff không tự đính kèm toàn bộ chi tiết Trip
 
 Nguyên mẫu hỗ trợ chuẩn bị chuyến công tác, xử lý sự cố trong chuyến đi và rà soát chi phí sau chuyến đi. Hệ thống chạy ngoại tuyến với dữ liệu giả lập; định tuyến, phân quyền, tính toán và đánh giá được thực hiện bằng quy tắc xác định.
 
-## Chạy web demo trên Windows (all in one)
+## Tải dự án và chuẩn bị môi trường
 
-Cài **Python 3.11 trở lên** (chọn **Add Python to PATH** khi cài). Sau đó nhấp đúp [run_demo.bat](run_demo.bat) tại thư mục gốc dự án. Không cần tự tạo hoặc kích hoạt môi trường Python trước.
+Yêu cầu **Python 3.11 trở lên** và Internet khi cài dependencies lần đầu. Không cần API key, Node.js, cơ sở dữ liệu hoặc file `.env`; sau khi cài, demo chạy ngoại tuyến với dữ liệu giả lập.
 
-File BAT tự tạo `.venv` nếu thiếu, cài dependencies nếu chưa có, chạy web server và mở trình duyệt khi server sẵn sàng. Lần cài dependencies đầu tiên cần Internet; demo dùng dữ liệu giả lập cục bộ.
+Clone repository bằng Git hoặc tải **Code → Download ZIP** rồi giải nén. Trong VS Code, chọn **File → Open Folder** mở thư mục dự án, sau đó **Terminal → New Terminal**. Terminal phải ở thư mục chứa `README.md`, `requirements.txt`, `pyproject.toml` và `data/`. Không chạy trong thư mục ZIP chưa giải nén. Các lệnh dưới đây dùng đường dẫn tương đối, không phụ thuộc tên tài khoản hay ổ đĩa.
 
-Có thể chạy từ PowerShell tại thư mục dự án:
+### Windows / PowerShell
+
+Cài Python và chọn **Add Python to PATH**. Kiểm tra:
 
 ```powershell
-.\run_demo.bat
+python --version
+Get-Location
+Test-Path .\pyproject.toml
 ```
 
-Địa chỉ mặc định: [http://127.0.0.1:8080](http://127.0.0.1:8080). Giữ cửa sổ terminal đang chạy; nhấn **Ctrl+C** để dừng server.
+Python phải từ 3.11 trở lên và lệnh cuối phải trả `True`. Nếu `python` không được nhận diện hoặc mở Microsoft Store, thử `py -3 --version`; nếu lệnh này chạy được, dùng `py -3 -m venv .venv` ở bước tạo môi trường bên dưới. Nếu cả hai đều không chạy được, cài Python rồi mở terminal mới.
 
-Nếu cổng 8080 đang được dùng, mở địa chỉ trên nếu đó là demo đang chạy, hoặc chọn cổng khác:
-
-```powershell
-.\run_demo.bat 8081
-```
-
-Khi đó truy cập [http://127.0.0.1:8081](http://127.0.0.1:8081). Nếu trình duyệt không tự mở, truy cập địa chỉ được in trong terminal. Nếu khởi động thất bại, cửa sổ giữ lại thông báo lỗi để kiểm tra.
-
-Giao diện có Chat, Trips, Drafts, Handoff, Audit log và Memory & Trace. Tài khoản được chọn từ dữ liệu giả lập, chưa phải đăng nhập production.
-
-### Cài thủ công hoặc sửa dependencies
-
-Chỉ cần dùng các lệnh này khi muốn chạy CLI, kiểm thử hoặc cài lại dependencies:
+**Lần đầu cài đặt** (chỉ tạo `.venv` khi chưa tồn tại):
 
 ```powershell
-python -m venv .venv
+if (-not (Test-Path .\.venv)) { python -m venv .venv }
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m pip check
-.\.venv\Scripts\python.exe -m travel_agent.app web --port 8080
+.\.venv\Scripts\python.exe -m travel_agent.app --help
 ```
 
-`requirements.txt` cài `jsonschema`, `pytest` và chính dự án ở chế độ chỉnh sửa (`-e .`).
+Nếu dùng `py` thay cho `python`, thay dòng đầu bằng `if (-not (Test-Path .\.venv)) { py -3 -m venv .venv }`.
+
+`pip check` phải báo `No broken requirements found`; lệnh cuối hiển thị các lệnh CLI. `requirements.txt` cài `jsonschema`, `pytest` và chính dự án ở chế độ chỉnh sửa (`-e .`). Dùng trực tiếp Python trong `.venv`, không cần activate hoặc đổi Execution Policy.
+
+**Các lần chạy sau:** bỏ qua bước tạo môi trường, chạy lệnh web hoặc test bên dưới. Khi cập nhật mã nguồn có thay đổi dependencies, dừng demo rồi chạy lại lệnh `pip install -r requirements.txt`.
+
+### macOS / Linux (bash hoặc zsh)
+
+Cài Python 3.11 trở lên bằng công cụ cài đặt của hệ điều hành. Tại thư mục gốc dự án:
+
+```bash
+python3 --version
+test -f pyproject.toml && echo "Đúng thư mục dự án"
+if [ ! -d .venv ]; then python3 -m venv .venv; fi
+./.venv/bin/python -m pip install -r requirements.txt
+./.venv/bin/python -m pip check
+./.venv/bin/python -m travel_agent.app --help
+```
+
+Trên Ubuntu/Debian, nếu thiếu `venv`/`ensurepip`, cài gói `python3-venv` (hoặc gói `python3.x-venv` tương ứng với phiên bản đang dùng) rồi tạo lại môi trường. Từ phần tiếp theo, các lệnh minh họa dùng PowerShell; trên macOS/Linux thay `.\.venv\Scripts\python.exe` bằng `./.venv/bin/python`, giữ nguyên arguments.
+
+## Chạy giao diện web
+
+Sau khi cài môi trường, tại thư mục gốc dự án chạy:
+
+```powershell
+.\.venv\Scripts\python.exe -m travel_agent.app web --host 127.0.0.1 --port 8080
+```
+
+Trên macOS/Linux:
+
+```bash
+./.venv/bin/python -m travel_agent.app web --host 127.0.0.1 --port 8080
+```
+
+Giữ terminal này đang chạy và tự mở [http://127.0.0.1:8080](http://127.0.0.1:8080) trong trình duyệt **trên cùng máy**. Nhấn **Ctrl+C** trong terminal chạy server để dừng. Mở terminal thứ hai tại cùng thư mục dự án nếu muốn chạy CLI/test song song; không tạo lại `.venv` khi demo đang chạy.
+
+Nếu cổng 8080 đang được dùng hoặc báo `WinError 10048`, dừng phiên demo cũ hoặc chọn cổng khác:
+
+```powershell
+.\.venv\Scripts\python.exe -m travel_agent.app web --host 127.0.0.1 --port 8081
+```
+
+Khi đó mở [http://127.0.0.1:8081](http://127.0.0.1:8081). Giao diện có Chat, Trips, Drafts, Handoff, Audit log và Memory & Trace. Tài khoản được chọn từ dữ liệu giả lập, chưa phải đăng nhập production. Kịch bản trình diễn: [Demo cho giáo viên](demo/DEMO_GIAO_VIEN.md).
+
+### Xử lý lỗi môi trường
+
+- **`Unable to copy ... venvlauncher.exe ... .venv\Scripts\python.exe`**: đang tạo lại môi trường và có thể gặp file bị khóa. Dừng web demo bằng **Ctrl+C** tại terminal đang chạy demo, dừng các phiên Python/debugger dùng môi trường này. Nếu `.venv` vẫn chạy được, không tạo lại; kiểm tra bằng `.\.venv\Scripts\python.exe -m pip check` rồi chạy demo. Không chạy `python -m venv .venv` trong lúc môi trường đang được sử dụng.
+- **Môi trường hỏng, sao chép từ máy khác hoặc chuyển đường dẫn**: `.venv` không dùng để chia sẻ giữa các máy. Sau khi dừng mọi tiến trình dùng môi trường, đổi tên `.venv` thành một thư mục dự phòng chưa tồn tại (ví dụ `Rename-Item -LiteralPath .venv -NewName .venv.backup` trong PowerShell), rồi làm lại bước cài đặt lần đầu. Nếu vẫn lỗi ghi file, kiểm tra quyền ghi thư mục hoặc phần mềm bảo vệ trên máy.
+- **`No module named travel_agent`, `jsonschema` hoặc `pytest`**: dùng đúng Python của `.venv`, kiểm tra đang ở thư mục gốc rồi chạy lại `.\.venv\Scripts\python.exe -m pip install -r requirements.txt`.
+- **Không tìm thấy `.venv\Scripts\python.exe`**: môi trường chưa được tạo thành công hoặc là môi trường của hệ điều hành khác; xử lý như môi trường hỏng ở trên.
+- **Không tìm thấy `requirements.txt` hoặc `pyproject.toml`**: mở terminal ở thư mục gốc dự án.
+- **Cài dependencies lỗi mạng/proxy**: kiểm tra kết nối Internet và cấu hình proxy của máy, sau đó chạy lại lệnh cài; chưa chạy demo/test khi cài đặt còn báo lỗi.
+- **`WinError 10013` khi mở localhost hoặc chạy test HTTP**: môi trường thực thi có thể chặn socket. Trong Codex cần cho phép lệnh chạy ngoài sandbox; hoặc chạy trong PowerShell cục bộ. Nếu vẫn lỗi, kiểm tra quyền mạng/firewall của Python và thử cổng khác.
 
 Thông báo lỗi luôn dùng tiếng Việt và giữ mã kỹ thuật để tra cứu. Truy cập dữ liệu ngoài phạm vi dùng thông báo chung; thao tác không phù hợp với role nêu rõ role, thao tác bị hạn chế và người có thể hỗ trợ. Phản hồi chỉ trình bày kết quả, căn cứ và bước tiếp theo; không chèn câu nhắc thừa về các hành động agent chưa làm.
 
@@ -130,12 +175,24 @@ Dispatcher kiểm tra registry, allowlist theo workflow, JSON Schema, quyền th
 
 ## Kiểm thử và ghi log
 
+Sau khi cài dependencies, mở terminal tại thư mục gốc dự án. Lệnh đầu chạy toàn bộ test; lệnh thứ hai chỉ chạy nhóm test quyền và memory. Evaluator tạo báo cáo đánh giá; `compileall` kiểm tra cú pháp.
+
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -v --basetemp .venv/pytest-tmp
 .\.venv\Scripts\python.exe -m pytest tests -v -k "scope or permission or role or preference or ttl" --basetemp .venv/pytest-tmp
 .\.venv\Scripts\python.exe eval/run_eval.py --label after
 .\.venv\Scripts\python.exe -m compileall -q src tests eval demo
 ```
+
+Trên macOS/Linux, chạy toàn bộ test và đánh giá bằng:
+
+```bash
+./.venv/bin/python -m pytest -v --basetemp .venv/pytest-tmp
+./.venv/bin/python eval/run_eval.py --label after
+./.venv/bin/python -m compileall -q src tests eval demo
+```
+
+Test thành công kết thúc bằng `passed`, không có `failed`/`ERROR`; evaluator in số ca `passed`/`failed` và đường dẫn báo cáo. `compileall -q` thành công không in lỗi. Thư mục `.venv/pytest-tmp` dành riêng cho pytest và được pytest dọn lại mỗi lần chạy; không lưu tài liệu vào đó hoặc chạy nhiều bộ test đồng thời với cùng `--basetemp`.
 
 Pytest và evaluator dùng bản sao dữ liệu tạm. Evaluator ghi kết quả vào `eval/reports/` và trace vào `eval/traces/`. Hội thoại demo ghi CSV có che mẫu token/số thẻ; audit kỹ thuật không ghi nguyên văn tin nhắn. Đây chưa phải cơ chế lọc mọi loại dữ liệu nhạy cảm.
 
@@ -182,4 +239,5 @@ Chọn scope tường minh trước khi xem; nút trên dòng khác chuyến ho�
 Yêu cầu pending mới được application mô phỏng phân công mặc định cho U-APR-001; model không được truyền người phê duyệt qua arguments. Helper quyết định bên ngoài tool set cũng phải kiểm tra phân công. Chưa có quyết định approve/reject qua chat.
 
 Lỗi quyền dùng câu “Bạn không có quyền truy cập dữ liệu hoặc thực hiện thao tác này”, giữ code unauthorized_scope. Không dùng câu này cho giới hạn chức năng (ví dụ đặt phòng) hoặc lỗi đầu vào. Thiếu scope được nhắc chọn request được phân công, không tự tạo phiếu hỗ trợ.
+
 
